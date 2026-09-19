@@ -29,6 +29,7 @@ private:
     void scanPaths();
 
 signals:
+    void databaseAboutToUpdate();
     void databaseUpdateComplete();
 
 };

@@ -3,6 +3,9 @@
 
 #include <QObject>
 #include <QThread>
+#include <QTimer>
+#include <QVector>
+#include <QPair>
 #include <spdlog/spdlog.h>
 #include <spdlog/async_logger.h>
 #include <spdlog/fmt/ostr.h>
@@ -26,6 +29,9 @@ class LazyDurationUpdateController : public QObject
     QStringList files;
     std::string m_loggingPrefix{"[LazyDurationController]"};
     std::shared_ptr<spdlog::logger> m_logger;
+    QVector<QPair<QString, int>> m_pendingDurations;
+    QTimer m_flushTimer;
+    void flushPendingDurations();
 
 public:
     explicit LazyDurationUpdateController(QObject *parent = nullptr);

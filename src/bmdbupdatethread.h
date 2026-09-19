@@ -23,6 +23,7 @@
 
 #include <QThread>
 #include <QStringList>
+#include <QSet>
 #include <QtSql>
 
 class BmDbUpdateThread : public QThread
@@ -45,6 +46,7 @@ public slots:
 private:
     QString m_path;
     QStringList findMediaFiles(const QString& directory);
+    QSet<QString> existingPathsUnder(const QString &directory, QSqlDatabase db);
     QStringList supportedExtensions;
     QSqlDatabase database;
 

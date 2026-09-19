@@ -34,7 +34,7 @@ public:
     QString getTrack();
     unsigned int getDuration() const;
     void setMedia(const QString& path);
-    void taglibTags(const QString& path);
+    bool taglibTags(const QString& path);
 
 signals:
 

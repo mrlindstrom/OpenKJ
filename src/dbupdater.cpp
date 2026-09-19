@@ -27,6 +27,8 @@
 #include <QDirIterator>
 #include <QStandardPaths>
 #include <QApplication>
+#include <QSet>
+#include <utility>
 #include "mzarchive.h"
 #include "karaokefileinfo.h"
 
@@ -337,31 +339,36 @@ void DbUpdater::DiskEnumerator::readNextDiskFile()
 
 void DbUpdater::DbEnumerator::prepareQuery(bool limitToPaths)
 {
-    if (!limitToPaths) {
-        m_dbSongs.prepare("SELECT songid, path, CASE discid WHEN '!!DROPPED!!' THEN 1 ELSE 0 END FROM dbsongs ORDER BY path");
-    }
-    else {
+    QString whereClause;
+    if (limitToPaths) {
         QStringList sql_path_filter;
         for(int i = 0; i < m_parent.m_paths.size(); i++) {
             sql_path_filter.append(QString("path LIKE :pathfilter%1").arg(i));
         }
-
-        m_dbSongs.prepare("SELECT songid, path, CASE discid WHEN '!!DROPPED!!' THEN 1 ELSE 0 END FROM dbsongs WHERE " + sql_path_filter.join(" OR ") + " ORDER BY path");
+        whereClause = " WHERE " + sql_path_filter.join(" OR ");
+    }
+    auto bindPathFilters = [&](QSqlQuery &q) {
+        if (!limitToPaths)
+            return;
         for(int i = 0; i < m_parent.m_paths.size(); i++) {
-            auto key = QString(":pathfilter%1").arg(i);
-            m_dbSongs.bindValue(key, m_parent.m_paths[i] + "%");
+            q.bindValue(QString(":pathfilter%1").arg(i), m_parent.m_paths[i] + "%");
         }
-    }
-    m_dbSongs.exec();
+    };
 
-    // trick to do count in SQlite:
+    // Count with COUNT(*) (only used for the progress bar) rather than seeking to last() on a
+    // scrollable query, which forces Qt to fetch and cache every row before the merge even starts.
     m_count = 0;
-    if(m_dbSongs.last())
-    {
-        m_count =  m_dbSongs.at() + 1;
-        m_dbSongs.first();
-        m_dbSongs.previous();
-    }
+    QSqlQuery countQuery;
+    countQuery.prepare("SELECT COUNT(*) FROM dbsongs" + whereClause);
+    bindPathFilters(countQuery);
+    if (countQuery.exec() && countQuery.next())
+        m_count = countQuery.value(0).toInt();
+
+    // The rows are read strictly sequentially, so a forward-only query avoids Qt's row cache.
+    m_dbSongs.setForwardOnly(true);
+    m_dbSongs.prepare("SELECT songid, path, CASE discid WHEN '!!DROPPED!!' THEN 1 ELSE 0 END FROM dbsongs" + whereClause + " ORDER BY path");
+    bindPathFilters(m_dbSongs);
+    m_dbSongs.exec();
 }
 
 void DbUpdater::DbEnumerator::readNextRecord()
@@ -432,31 +439,28 @@ void DbUpdater::fixMissingFiles(QVector<DbSongRecord> &filesMissingOnDisk, QStri
 
     // Copy records that are still missing to a new list instead of removing them from filesMissingOnDisk. It's faster that way.
     QVector<DbSongRecord> filesMissingOnDisk_still;
+    // Paths that were matched to a missing record. Removed from newFilesOnDisk in a single pass at the end
+    // (calling QStringList::removeOne() per match is O(n) each, i.e. O(n^2) overall).
+    QSet<QString> matchedNewPaths;
     QSqlQuery query;
     query.exec("BEGIN TRANSACTION");
     query.prepare("UPDATE dbsongs SET path = :newpath WHERE songid = :id");
 
-    foreach(auto missingFile, filesMissingOnDisk) {
-
-        emit progressMessage("Looking for matches to missing db song: " + missingFile.path + "...");
-        qInfo() << "Looking for match for missing file: " << missingFile.path;
-
-        QApplication::processEvents();
+    for (const auto &missingFile : std::as_const(filesMissingOnDisk)) {
 
         bool matchFound = false;
-        auto filenameWithoutPath = QFileInfo(missingFile.path).fileName();
+        const int filenameBeginsAt = missingFile.path.lastIndexOf('/') + 1;
+        const QString filenameWithoutPath = missingFile.path.mid(filenameBeginsAt);
         auto const lb = std::lower_bound(filesOnDiskFilenamesOnlySorted.begin(), filesOnDiskFilenamesOnlySorted.end(), filenameWithoutPath, caseInsensitiveSort);
-        if (lb->compare(filenameWithoutPath, Qt::CaseInsensitive) == 0) {
+        if (lb != filesOnDiskFilenamesOnlySorted.end()
+                && lb->compare(filenameWithoutPath, Qt::CaseInsensitive) == 0
+                && !matchedNewPaths.contains(*lb->string())) {
             query.bindValue(":newpath", *lb->string());
             query.bindValue(":id", missingFile.id);
 
             if (query.exec()) {
-                emit progressMessage("Found match! Modifying existing song.");
-                qInfo() << "Missing file found at new location";
-                qInfo() << "  old: " << missingFile.path;
-                qInfo() << "  new: " << lb->string();
-
-                newFilesOnDisk.removeOne(*lb->string());
+                emit progressMessage("Moved: " + missingFile.path + " -> " + *lb->string());
+                matchedNewPaths.insert(*lb->string());
                 matchFound = true;
             }
             else {
@@ -466,14 +470,25 @@ void DbUpdater::fixMissingFiles(QVector<DbSongRecord> &filesMissingOnDisk, QStri
 
         if (!matchFound) {
             filesMissingOnDisk_still.append(missingFile);
-            emit progressMessage("No match found");
         }
         count++;
         if (shouldUpdateGui()) {
             emit progressChanged(count, filesMissingOnDisk.size());
+            QApplication::processEvents();
         }
     }
     query.exec("COMMIT");
+    qInfo() << "Moved files detected:" << matchedNewPaths.size() << "of" << filesMissingOnDisk.size() << "missing";
+
+    if (!matchedNewPaths.isEmpty()) {
+        QStringList remaining;
+        remaining.reserve(newFilesOnDisk.size() - matchedNewPaths.size());
+        for (const auto &f : std::as_const(newFilesOnDisk)) {
+            if (!matchedNewPaths.contains(f))
+                remaining.append(f);
+        }
+        newFilesOnDisk = remaining;
+    }
     filesMissingOnDisk = filesMissingOnDisk_still;
 }
 

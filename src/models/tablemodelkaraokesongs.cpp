@@ -170,6 +170,7 @@ QVariant TableModelKaraokeSongs::getItemDisplayData(const QModelIndex &index) co
 void TableModelKaraokeSongs::loadData() {
     emit layoutAboutToBeChanged();
     m_allSongs.clear();
+    m_songsByPath.clear();
     m_filteredSongs.clear();
     QSqlQuery query;
     query.exec("SELECT songid,artist,title,discid,duration,filename,path,searchstring,plays,lastplay FROM dbsongs");
@@ -411,17 +412,19 @@ void TableModelKaraokeSongs::sort(int column, Qt::SortOrder order) {
 }
 
 void TableModelKaraokeSongs::setSongDuration(const QString &path, unsigned int duration) {
-    auto it = find_if(m_allSongs.begin(), m_allSongs.end(), [&path](const std::shared_ptr<okj::KaraokeSong> &song) {
-        return (song->path == path);
-    });
-    if (it == m_allSongs.end())
+    // Called once per song by the lazy duration updater, so avoid a linear string search of the whole library.
+    if (m_songsByPath.isEmpty() && !m_allSongs.empty()) {
+        m_songsByPath.reserve(static_cast<int>(m_allSongs.size()));
+        for (const auto &song : m_allSongs)
+            m_songsByPath.insert(song->path, song);
+    }
+    auto hashIt = m_songsByPath.constFind(path);
+    if (hashIt == m_songsByPath.constEnd())
         return;
-    it->get()->duration = static_cast<int>(duration);
-    int songId = it->get()->id;
-    auto it2 = find_if(m_filteredSongs.begin(), m_filteredSongs.end(),
-                       [&songId](const std::shared_ptr<okj::KaraokeSong> &song) {
-                           return (song->id == songId);
-                       });
+    const std::shared_ptr<okj::KaraokeSong> song = hashIt.value();
+    song->duration = static_cast<int>(duration);
+    // Pointer comparison is far cheaper than comparing path strings.
+    auto it2 = find(m_filteredSongs.begin(), m_filteredSongs.end(), song);
     if (it2 != m_filteredSongs.end()) {
         int row = (int) std::distance(m_filteredSongs.begin(), it2);
         emit dataChanged(this->index(row, COL_DURATION), this->index(row, COL_DURATION), QVector<int>(Qt::DisplayRole));
@@ -477,6 +480,7 @@ TableModelKaraokeSongs::DeleteStatus TableModelKaraokeSongs::removeBadSong(QStri
                                                  return (song->path == path);
                                              });
         m_allSongs.erase(newAllSongsEnd, m_allSongs.end());
+        m_songsByPath.clear();
 
         if (isCdg) {
             if (!QFile::remove(mediaFile)) {
@@ -543,6 +547,7 @@ int TableModelKaraokeSongs::addSong(okj::KaraokeSong song) {
         int lastInsertId = query.lastInsertId().toInt();
         song.id = lastInsertId;
         m_allSongs.push_back(std::make_shared<okj::KaraokeSong>(song));
+        m_songsByPath.clear();
         search(m_lastSearch);
         return lastInsertId;
     }

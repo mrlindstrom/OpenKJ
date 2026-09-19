@@ -46,6 +46,7 @@ DlgDatabase::DlgDatabase(TableModelKaraokeSongs &dbModel, QWidget *parent) :
 
     if (m_settings.dbDirectoryWatchEnabled()) {
         m_directoryMonitor = new DirectoryMonitor(this, sourcedirmodel->getSourceDirs());
+        connect(m_directoryMonitor, &DirectoryMonitor::databaseAboutToUpdate, this, &DlgDatabase::databaseAboutToUpdate);
         connect(m_directoryMonitor, &DirectoryMonitor::databaseUpdateComplete, this, &DlgDatabase::databaseUpdateComplete);
     }
 }
@@ -179,6 +180,11 @@ void DlgDatabase::scan(bool scanAllPaths)
     connect(&updater, &DbUpdater::progressChanged, dbUpdateDlg, &DlgDbUpdate::changeProgress);
     dbUpdateDlg->show();
     QApplication::processEvents();
+
+    // Stop the background lazy duration scanner first. Otherwise it keeps reading media files
+    // (competing for disk/network I/O) and floods the main thread with per-song DB/model updates
+    // that get processed inside every QApplication::processEvents() call made by the updater.
+    emit databaseAboutToUpdate();
 
     updater.process(paths, processingOptions);
 

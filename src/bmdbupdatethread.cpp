@@ -24,6 +24,7 @@
 #include <QSqlQuery>
 #include <QFileInfo>
 #include <QApplication>
+#include <QElapsedTimer>
 #include "tagreader.h"
 #include <QtConcurrent>
 
@@ -123,14 +124,46 @@ void BmDbUpdateThread::run()
     database.close();
 }
 
+QSet<QString> BmDbUpdateThread::existingPathsUnder(const QString &directory, QSqlDatabase db)
+{
+    // Paths already in the break music DB for this directory, so an update only reads
+    // tags/durations for files that are actually new instead of re-probing the whole library
+    // (the INSERT OR IGNORE used to throw that work away for every existing song).
+    QSet<QString> paths;
+    QString prefix = QDir(directory).absolutePath();
+    if (!prefix.endsWith('/'))
+        prefix += '/';
+    QSqlQuery query(db);
+    query.setForwardOnly(true);
+    // substr() instead of LIKE: LIKE treats '_' and '%' in folder names as wildcards.
+    query.prepare("SELECT path FROM bmsongs WHERE substr(path, 1, :len) = :prefix");
+    query.bindValue(":len", prefix.length());
+    query.bindValue(":prefix", prefix);
+    if (query.exec()) {
+        while (query.next())
+            paths.insert(query.value(0).toString());
+    }
+    return paths;
+}
+
 void BmDbUpdateThread::startUnthreaded()
 {
     TagReader reader;
     emit progressChanged(0, 0);
     emit progressMessage("Getting list of files in " + m_path);
     emit stateChanged("Finding media files...");
-    QStringList files = findMediaFiles(m_path);
-    emit progressMessage("Found " + QString::number(files.size()) + " files.");
+    QApplication::processEvents();
+    const QStringList allFiles = findMediaFiles(m_path);
+    const QSet<QString> existing = existingPathsUnder(m_path, QSqlDatabase::database());
+    QStringList files;
+    files.reserve(allFiles.size());
+    for (const auto &f : allFiles) {
+        if (!existing.contains(f))
+            files.append(f);
+    }
+    emit progressMessage("Found " + QString::number(allFiles.size()) + " files, " + QString::number(files.size()) + " new.");
+    QElapsedTimer guiTimer;
+    guiTimer.start();
     QSqlQuery query;
     emit stateChanged("Getting metadata and adding songs to the database");
     emit progressMessage("Getting metadata and adding songs to the database");
@@ -142,14 +175,14 @@ void BmDbUpdateThread::startUnthreaded()
     qInfo() << query.lastError();
     query.exec("PRAGMA temp_store=2");
     qInfo() << "Beginning transaction";
-    database.transaction();
+    // Note: the 'database' member is never opened for the unthreaded path, so database.transaction()
+    // silently failed and every INSERT ran as its own transaction. Use the default connection instead.
+    query.exec("BEGIN TRANSACTION");
     qInfo() << query.lastError();
     query.prepare("INSERT OR IGNORE INTO bmsongs (artist,title,path,filename,duration,searchstring) VALUES(:artist, :title, :path, :filename, :duration, :searchstring)");
     for (int i=0; i < files.size(); i++)
     {
-        QApplication::processEvents();
-        QFileInfo fi(files.at(i));
-        emit progressMessage("Processing file: " + fi.fileName());
+        emit progressMessage("Adding: " + files.at(i));
         reader.setMedia(files.at(i));
         QString duration = QString::number(reader.getDuration() / 1000);
         QString artist = reader.getArtist();
@@ -161,9 +194,14 @@ void BmDbUpdateThread::startUnthreaded()
         query.bindValue(":duration", duration);
         query.bindValue(":searchstring", artist + title + files.at(i));
         query.exec();
-        emit progressChanged(i + 1, files.size());
+        if (guiTimer.elapsed() > 200) {
+            guiTimer.restart();
+            emit progressChanged(i + 1, files.size());
+            QApplication::processEvents();
+        }
     }
-    database.commit();
+    emit progressChanged(files.size(), files.size());
+    query.exec("COMMIT");
     qInfo() << query.lastError();
     emit progressMessage("Finished processing files for directory: " + m_path);
 }

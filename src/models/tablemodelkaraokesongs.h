@@ -2,6 +2,7 @@
 #define TABLEMODELKARAOKESONGS_H
 
 #include <QAbstractTableModel>
+#include <QHash>
 #include <QDateTime>
 #include <QImage>
 #include <memory>
@@ -64,6 +65,8 @@ private:
     std::shared_ptr<spdlog::logger> m_logger;
     std::vector<std::shared_ptr<okj::KaraokeSong>> m_filteredSongs;
     std::vector< std::shared_ptr<okj::KaraokeSong> > m_allSongs;
+    // Lazily built path -> song lookup used by setSongDuration(). Cleared whenever m_allSongs gains/loses entries.
+    QHash<QString, std::shared_ptr<okj::KaraokeSong>> m_songsByPath;
     QString m_lastSearch;
     int m_curFontHeight{0};
     QImage m_iconCdg;

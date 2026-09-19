@@ -1,6 +1,7 @@
 #include "durationlazyupdater.h"
 
 #include <QSqlQuery>
+#include <utility>
 #include <QVariant>
 #include "mzarchive.h"
 #include "karaokefileinfo.h"
@@ -51,11 +52,16 @@ LazyDurationUpdateController::LazyDurationUpdateController(QObject *parent) : QO
     connect(worker, &LazyDurationUpdateWorker::gotDuration, this, &LazyDurationUpdateController::updateDbDuration);
     workerThread.start();
     workerThread.setPriority(QThread::IdlePriority);
+    m_flushTimer.setSingleShot(true);
+    m_flushTimer.setInterval(1000);
+    connect(&m_flushTimer, &QTimer::timeout, this, &LazyDurationUpdateController::flushPendingDurations);
 }
 
 LazyDurationUpdateController::~LazyDurationUpdateController() {
+    workerThread.requestInterruption();
     workerThread.quit();
     workerThread.wait();
+    flushPendingDurations();
 }
 
 void LazyDurationUpdateController::getSongsRequiringUpdate()
@@ -79,12 +85,32 @@ void LazyDurationUpdateController::stopWork()
 
 void LazyDurationUpdateController::updateDbDuration(const QString& file, int duration)
 {
-    QSqlQuery query;
-    query.prepare("UPDATE dbsongs SET duration = :duration WHERE path = :path");
-    query.bindValue(":path", file);
-    query.bindValue(":duration", duration);
-    query.exec();
+    // Batch DB writes instead of one auto-committed UPDATE (i.e. one SQLite transaction) per song.
+    m_pendingDurations.append(qMakePair(file, duration));
     emit gotDuration(file, duration);
+    if (m_pendingDurations.size() >= 250)
+        flushPendingDurations();
+    else if (!m_flushTimer.isActive())
+        m_flushTimer.start();
+}
+
+void LazyDurationUpdateController::flushPendingDurations()
+{
+    m_flushTimer.stop();
+    if (m_pendingDurations.isEmpty())
+        return;
+    QSqlQuery query;
+    // SAVEPOINT (not BEGIN) so this nests safely if DbUpdater already has a transaction open
+    // when this runs from inside one of its processEvents() calls.
+    query.exec("SAVEPOINT lazyduration");
+    query.prepare("UPDATE dbsongs SET duration = :duration WHERE path = :path");
+    for (const auto &item : std::as_const(m_pendingDurations)) {
+        query.bindValue(":path", item.first);
+        query.bindValue(":duration", item.second);
+        query.exec();
+    }
+    query.exec("RELEASE SAVEPOINT lazyduration");
+    m_pendingDurations.clear();
 }
 
 void LazyDurationUpdateController::getDurations()

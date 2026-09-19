@@ -861,6 +861,10 @@ void MainWindow::setupConnections() {
     connect(ui->comboBoxHistoryDblClick, QOverload<int>::of(&QComboBox::currentIndexChanged), &m_settings,
             &Settings::setHistoryDblClickAction);
     connect(&m_rotModel, &TableModelRotation::songDroppedOnSinger, this, &MainWindow::songDroppedOnSinger);
+    connect(dbDialog.get(), &DlgDatabase::databaseAboutToUpdate, this, [this]() {
+        // Pause lazy duration loading while the DB is being scanned; databaseUpdated() restarts it.
+        m_lazyDurationUpdater->stopWork();
+    });
     connect(dbDialog.get(), &DlgDatabase::databaseUpdateComplete, this, &MainWindow::databaseUpdated);
     connect(dbDialog.get(), &DlgDatabase::databaseSongAdded, &m_karaokeSongsModel, &TableModelKaraokeSongs::loadData);
     connect(dbDialog.get(), &DlgDatabase::databaseSongAdded, requestsDialog.get(), &DlgRequests::databaseSongAdded);

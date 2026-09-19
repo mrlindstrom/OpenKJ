@@ -1,6 +1,7 @@
 #include "tagreader.h"
 #include <tag.h>
 #include <taglib/fileref.h>
+#include <array>
 
 TagReader::TagReader(QObject *parent) : QObject(parent)
 {
@@ -42,11 +43,27 @@ unsigned int TagReader::getDuration() const
 void TagReader::setMedia(const QString& path)
 {
     m_logger->info("{} Getting tags for: {}", m_loggingPrefix, path);
-    if ((path.endsWith(".mp3", Qt::CaseInsensitive)) || (path.endsWith(".ogg", Qt::CaseInsensitive)) || path.endsWith(".mp4", Qt::CaseInsensitive) || path.endsWith(".m4v", Qt::CaseInsensitive))
-    {
-        m_logger->info("{} Using taglib to get tags", m_loggingPrefix);
-        taglibTags(path);
-        return;
+    // Reset results so a file with no tags doesn't inherit the previous file's artist/title/duration.
+    m_artist.clear();
+    m_title.clear();
+    m_album.clear();
+    m_track.clear();
+    m_duration = 0;
+
+    // TagLib reads the headers directly and is far faster than spinning up a GStreamer discoverer
+    // pipeline per file, so use it for every format it supports and only fall back to GStreamer
+    // for other formats (mkv, avi, mpg, ...) or when TagLib can't read the file.
+    static const std::array<const char *, 9> taglibExtensions {
+        ".mp3", ".ogg", ".mp4", ".m4v", ".m4a", ".flac", ".wav", ".wma", ".opus"
+    };
+    for (const auto *ext : taglibExtensions) {
+        if (path.endsWith(QLatin1String(ext), Qt::CaseInsensitive)) {
+            m_logger->info("{} Using taglib to get tags", m_loggingPrefix);
+            if (taglibTags(path))
+                return;
+            m_logger->info("{} Taglib failed, falling back to GStreamer", m_loggingPrefix);
+            break;
+        }
     }
     m_logger->info("{} Using GStreamer to get tags", m_loggingPrefix);
     QString uri;
@@ -73,12 +90,14 @@ void TagReader::setMedia(const QString& path)
             gchar *tagVal;
             if (gst_tag_list_get_string(tags,"artist",&tagVal))
             {
-                m_artist = tagVal;
+                m_artist = QString::fromUtf8(tagVal);
+                g_free(tagVal);
                 m_logger->info("{} Got artist tag: {}", m_loggingPrefix, m_artist);
             }
             if (gst_tag_list_get_string(tags,"title",&tagVal))
             {
-                m_title = tagVal;
+                m_title = QString::fromUtf8(tagVal);
+                g_free(tagVal);
                 m_logger->info("{} Got title tag: {}", m_loggingPrefix, m_title);
             }
         }
@@ -91,10 +110,15 @@ void TagReader::setMedia(const QString& path)
     m_logger->info("{} Done getting tags for: {}", m_loggingPrefix, path);
 }
 
-void TagReader::taglibTags(const QString& path)
+bool TagReader::taglibTags(const QString& path)
 {
+#ifdef Q_OS_WIN
+    // Wide-char path so filenames outside the current ANSI code page still open.
+    TagLib::FileRef f(reinterpret_cast<const wchar_t *>(path.utf16()));
+#else
     TagLib::FileRef f(path.toLocal8Bit().data());
-    if (!f.isNull())
+#endif
+    if (!f.isNull() && f.tag() && f.audioProperties())
     {
         m_artist = f.tag()->artist().toCString(true);
         m_title = f.tag()->title().toCString(true);
@@ -108,6 +132,7 @@ void TagReader::taglibTags(const QString& path)
         else
             m_track = QString::number(track);
         m_logger->info("{} Taglib result: Artist: {} - Title: {} - Album: {} - Track: {} - Duration: {}", m_loggingPrefix, m_artist, m_title, m_album, m_track, m_duration);
+        return true;
     }
     else
     {
@@ -116,5 +141,6 @@ void TagReader::taglibTags(const QString& path)
         m_title = QString();
         m_album = QString();
         m_duration = 0;
+        return false;
     }
 }
