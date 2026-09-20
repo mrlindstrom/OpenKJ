@@ -21,7 +21,9 @@ concurrency:
 jobs:
   build:
     name: Fork macOS Build
-    runs-on: macos-latest
+    # Pinned rather than macos-latest: the Xcode 21 toolchain on the current image
+    # rejects the consteval usage in the fmt version vendored with spdlog 1.9.2.
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v5
       with:
