@@ -21,7 +21,9 @@ concurrency:
 jobs:
   build:
     name: Fork Windows Build
-    runs-on: windows-2025
+    # Pinned rather than windows-2025: that image now ships Visual Studio 2026, whose
+    # STL dropped stdext::checked_array_iterator, which Qt 5.15.2's headers still use.
+    runs-on: windows-2022
     strategy:
       matrix:
         include:
