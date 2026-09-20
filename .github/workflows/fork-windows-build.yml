@@ -110,7 +110,7 @@ jobs:
       uses: carlosperate/download-file-action@v2
       id: download-gst
       with:
-        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.27.1/mingw/gstreamer-1.0-mingw-${{ matrix.arch }}-1.27.1.msi'
+        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.26.11/mingw/gstreamer-1.0-mingw-${{ matrix.arch }}-1.26.11.msi'
         file-name: 'gstreamer.msi'
         location: './downloads'
 
@@ -118,7 +118,7 @@ jobs:
       uses: carlosperate/download-file-action@v2
       id: download-gst-dev
       with:
-        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.27.1/mingw/gstreamer-1.0-devel-mingw-${{ matrix.arch }}-1.27.1.msi'
+        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.26.11/mingw/gstreamer-1.0-devel-mingw-${{ matrix.arch }}-1.26.11.msi'
         file-name: 'gstreamer-devel.msi'
         location: './downloads'
 
