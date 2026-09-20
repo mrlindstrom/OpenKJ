@@ -77,7 +77,13 @@ jobs:
     - name: install deps
       run: |
         brew install cmake ninja pkgconf cppunit utf8cpp qt@5
-        pip install osxrelocator
+
+    # The osxrelocator package on PyPI is Python 2 only and won't run under the runner's
+    # Python 3, so use the small equivalent kept in .github/scripts instead.
+    - name: Install osxrelocator replacement
+      run: |
+        sudo install -m 0755 .github/scripts/osxrelocator /usr/local/bin/osxrelocator
+        osxrelocator 2>&1 | head -1 || true
 
     # Build against GStreamer's own macOS framework rather than the Homebrew formula, so the
     # framework can be copied into the .app and the result runs on Macs without GStreamer.
@@ -112,6 +118,12 @@ jobs:
       run: |
         cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=Release -DBUNDLE_GSTREAMER=True . -B build -G Ninja
         ninja -C build
+
+    - name: Ad-hoc sign the app bundle
+      working-directory: ${{github.workspace}}/build
+      run: |
+        codesign --force --deep --sign - openkj.app
+        codesign --verify --verbose openkj.app || true
 
     - name: Upload app
       uses: actions/upload-artifact@v4

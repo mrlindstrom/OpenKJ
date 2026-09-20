@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Rewrite Mach-O install names, dependencies and rpaths under a directory.
+
+Stands in for cerbero's osxrelocator, which is only published as Python 2 code.
+Usage: osxrelocator DIRECTORY OLD_PREFIX NEW_PREFIX [-r]
+Every Mach-O file under DIRECTORY that refers to OLD_PREFIX is rewritten to
+refer to NEW_PREFIX instead.  The walk is always recursive; -r is accepted and
+ignored so the command line matches the original tool.
+"""
+import os
+import subprocess
+import sys
+
+MACHO_MAGIC = (
+    b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe",   # 64/32 bit little endian
+    b"\xfe\xed\xfa\xcf", b"\xfe\xed\xfa\xce",   # 64/32 bit big endian
+    b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",   # universal binaries
+)
+
+
+def is_macho(path):
+    if os.path.islink(path) or not os.path.isfile(path):
+        return False
+    try:
+        with open(path, "rb") as handle:
+            return handle.read(4) in MACHO_MAGIC
+    except OSError:
+        return False
+
+
+def load_commands(path):
+    """Returns (id, [dependencies], [rpaths]) for a Mach-O file."""
+    result = subprocess.run(["otool", "-l", path], capture_output=True, text=True)
+    lines = result.stdout.splitlines()
+    identity, deps, rpaths = None, [], []
+
+    def value_after(start, key):
+        for line in lines[start:start + 6]:
+            stripped = line.strip()
+            if stripped.startswith(key + " "):
+                return stripped[len(key) + 1:].split(" (offset")[0]
+        return None
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped in ("cmd LC_LOAD_DYLIB", "cmd LC_LOAD_WEAK_DYLIB", "cmd LC_REEXPORT_DYLIB"):
+            found = value_after(index, "name")
+            if found:
+                deps.append(found)
+        elif stripped == "cmd LC_ID_DYLIB":
+            identity = value_after(index, "name") or identity
+        elif stripped == "cmd LC_RPATH":
+            found = value_after(index, "path")
+            if found:
+                rpaths.append(found)
+    return identity, deps, rpaths
+
+
+def main():
+    args = [arg for arg in sys.argv[1:] if arg != "-r"]
+    if len(args) != 3:
+        sys.stderr.write("usage: osxrelocator DIRECTORY OLD_PREFIX NEW_PREFIX [-r]\n")
+        return 2
+    root, old, new = args
+    if not os.path.isdir(root):
+        sys.stderr.write("osxrelocator: no such directory: %s\n" % root)
+        return 1
+
+    changed = 0
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for filename in filenames:
+            path = os.path.join(dirpath, filename)
+            if not is_macho(path):
+                continue
+            identity, deps, rpaths = load_commands(path)
+            command = ["install_name_tool"]
+            if identity and identity.startswith(old):
+                command += ["-id", new + identity[len(old):]]
+            for dep in deps:
+                if dep.startswith(old):
+                    command += ["-change", dep, new + dep[len(old):]]
+            for rpath in rpaths:
+                if rpath.startswith(old):
+                    command += ["-rpath", rpath, new + rpath[len(old):]]
+            if len(command) == 1:
+                continue
+            result = subprocess.run(command + [path], capture_output=True, text=True)
+            if result.returncode != 0:
+                sys.stderr.write("osxrelocator: warning: %s: %s\n" % (path, result.stderr.strip()))
+            else:
+                changed += 1
+    print("osxrelocator: rewrote %d file(s) under %s" % (changed, root))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
