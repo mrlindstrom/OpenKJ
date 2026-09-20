@@ -185,6 +185,28 @@ jobs:
         cp -Rv c:/Program\ Files/gstreamer ./gstreamer-dist
       shell: bash
 
+    # The devel package installs headers, static libs and docs alongside the runtime.  None of
+    # that is needed to run OpenKJ, and copying it into the installer roughly triples its size.
+    - name: Trim development files from the gstreamer dist copy
+      run: |
+        GSTDIST=./gstreamer-dist/1.0/mingw_x86_64
+        du -sh "$GSTDIST"
+        rm -rf "$GSTDIST/include"
+        rm -rf "$GSTDIST/lib/pkgconfig"
+        rm -rf "$GSTDIST/lib/cmake"
+        rm -rf "$GSTDIST/lib/glib-2.0/include"
+        rm -rf "$GSTDIST/lib/gstreamer-1.0/include"
+        rm -rf "$GSTDIST/share/gtk-doc"
+        rm -rf "$GSTDIST/share/man"
+        rm -rf "$GSTDIST/share/doc"
+        rm -rf "$GSTDIST/share/gdb"
+        rm -rf "$GSTDIST/share/gir-1.0"
+        find "$GSTDIST" -name '*.a' -delete
+        find "$GSTDIST" -name '*.la' -delete
+        find "$GSTDIST" -name '*.def' -delete
+        du -sh "$GSTDIST"
+      shell: bash
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
