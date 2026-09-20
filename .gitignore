@@ -54,6 +54,10 @@ CMakeSettings.json
 .vs
 
 # CLion
-.ideaClaude outputs/
+.idea
+Claude outputs/
 aqtinstall.log
 build/
+
+# Workflow files must not be caught by the *build* rule above
+!.github/workflows/*.yml
