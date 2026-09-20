@@ -105,6 +105,7 @@ signals:
     void rotationShowNextSongChanged(bool enabled);
     void requestServerEnableChanged(bool enabled);
     void videoOffsetChanged(int offsetMs);
+    void qrCodeSettingsChanged();
 
 private slots:
     void comboBoxConsoleLogLevelChanged(int index);

@@ -888,6 +888,108 @@ void Settings::setTickerCustomString(const QString &value)
     settings->setValue("tickerCustomString", value);
 }
 
+// QR code shown on the singer display, typically pointing at the song request page.
+// Corner: 0 = top left, 1 = top right, 2 = bottom left, 3 = bottom right.
+// Size is a percentage of the singer window height so it scales with the display.
+bool Settings::qrCodeEnabled()
+{
+    return settings->value("qrCodeEnabled", false).toBool();
+}
+
+void Settings::setQrCodeEnabled(bool enabled)
+{
+    settings->setValue("qrCodeEnabled", enabled);
+    emit qrCodeSettingsChanged();
+}
+
+QString Settings::qrCodeUrl()
+{
+    return settings->value("qrCodeUrl", "").toString();
+}
+
+void Settings::setQrCodeUrl(const QString &url)
+{
+    settings->setValue("qrCodeUrl", url);
+    emit qrCodeSettingsChanged();
+}
+
+QString Settings::qrCodeCaption()
+{
+    return settings->value("qrCodeCaption", "").toString();
+}
+
+void Settings::setQrCodeCaption(const QString &caption)
+{
+    settings->setValue("qrCodeCaption", caption);
+    emit qrCodeSettingsChanged();
+}
+
+int Settings::qrCodeCorner()
+{
+    return settings->value("qrCodeCorner", 3).toInt();
+}
+
+void Settings::setQrCodeCorner(int corner)
+{
+    settings->setValue("qrCodeCorner", corner);
+    emit qrCodeSettingsChanged();
+}
+
+int Settings::qrCodeSizePercent()
+{
+    return settings->value("qrCodeSizePercent", 15).toInt();
+}
+
+void Settings::setQrCodeSizePercent(int percent)
+{
+    settings->setValue("qrCodeSizePercent", percent);
+    emit qrCodeSettingsChanged();
+}
+
+int Settings::qrCodeOffsetX()
+{
+    return settings->value("qrCodeOffsetX", 0).toInt();
+}
+
+void Settings::setQrCodeOffsetX(int offset)
+{
+    settings->setValue("qrCodeOffsetX", offset);
+    emit qrCodeSettingsChanged();
+}
+
+int Settings::qrCodeOffsetY()
+{
+    return settings->value("qrCodeOffsetY", 0).toInt();
+}
+
+QColor Settings::qrCodeFgColor()
+{
+    return settings->value("qrCodeFgColor", QColor(Qt::black)).value<QColor>();
+}
+
+void Settings::setQrCodeFgColor(QColor color)
+{
+    settings->setValue("qrCodeFgColor", color);
+    emit qrCodeSettingsChanged();
+}
+
+QColor Settings::qrCodeBgColor()
+{
+    return settings->value("qrCodeBgColor", QColor(Qt::white)).value<QColor>();
+}
+
+void Settings::setQrCodeBgColor(QColor color)
+{
+    settings->setValue("qrCodeBgColor", color);
+    emit qrCodeSettingsChanged();
+}
+
+void Settings::setQrCodeOffsetY(int offset)
+{
+    settings->setValue("qrCodeOffsetY", offset);
+    emit qrCodeSettingsChanged();
+}
+
 bool Settings::tickerShowRotationInfo()
 {
     return settings->value("tickerShowRotationInfo", true).toBool();

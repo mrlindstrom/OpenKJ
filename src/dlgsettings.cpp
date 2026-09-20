@@ -38,6 +38,36 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
+namespace {
+// Style sheet used by the colour preview buttons, matching the ones in the ticker settings.
+QString colorSwatchStyleSheet(const QColor &color)
+{
+    const QString rgb = QString("%1,%2,%3").arg(color.red()).arg(color.green()).arg(color.blue());
+    return QString("QPushButton {\n"
+                   "    border: 2px solid #8f8f91;\n"
+                   "    border-radius: 6px;\n"
+                   "    background-color: rgb(%1);\n"
+                   "    min-width: 40px;\n"
+                   "    padding-left: 5px;\n"
+                   "    padding-right: 5px;\n"
+                   "    padding-top: 3px;\n"
+                   "    padding-bottom: 3px;\n"
+                   "}\n"
+                   "\n"
+                   "QPushButton:pressed {\n"
+                   "    background-color: rgb(%1);\n"
+                   "}\n"
+                   "\n"
+                   "QPushButton:flat {\n"
+                   "    border: none;\n"
+                   "}\n"
+                   "\n"
+                   "QPushButton:default {\n"
+                   "    border-color: navy;\n"
+                   "}").arg(rgb);
+}
+} // namespace
+
 DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBackend, OKJSongbookAPI &songbookAPI,
                          QWidget *parent) :
         QDialog(parent),
@@ -86,6 +116,65 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
     ui->checkBoxLazyLoadDurations->setChecked(m_settings.dbLazyLoadDurations());
     ui->checkBoxMonitorDirs->setChecked(m_settings.dbDirectoryWatchEnabled());
     ui->groupBoxShowDuration->setChecked(m_settings.cdgRemainEnabled());
+
+    // QR code shown on the singer display
+    ui->groupBoxQrCode->setChecked(m_settings.qrCodeEnabled());
+    ui->lineEditQrUrl->setText(m_settings.qrCodeUrl());
+    ui->lineEditQrCaption->setText(m_settings.qrCodeCaption());
+    ui->comboBoxQrCorner->setCurrentIndex(m_settings.qrCodeCorner());
+    ui->spinBoxQrSize->setValue(m_settings.qrCodeSizePercent());
+    ui->spinBoxQrOffsetX->setValue(m_settings.qrCodeOffsetX());
+    ui->spinBoxQrOffsetY->setValue(m_settings.qrCodeOffsetY());
+    connect(ui->groupBoxQrCode, &QGroupBox::toggled, this, [this](bool checked) {
+        m_settings.setQrCodeEnabled(checked);
+        emit qrCodeSettingsChanged();
+    });
+    connect(ui->lineEditQrUrl, &QLineEdit::editingFinished, this, [this]() {
+        if (m_settings.qrCodeUrl() == ui->lineEditQrUrl->text())
+            return;
+        m_settings.setQrCodeUrl(ui->lineEditQrUrl->text());
+        emit qrCodeSettingsChanged();
+    });
+    connect(ui->lineEditQrCaption, &QLineEdit::editingFinished, this, [this]() {
+        if (m_settings.qrCodeCaption() == ui->lineEditQrCaption->text())
+            return;
+        m_settings.setQrCodeCaption(ui->lineEditQrCaption->text());
+        emit qrCodeSettingsChanged();
+    });
+    connect(ui->comboBoxQrCorner, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_settings.setQrCodeCorner(index);
+        emit qrCodeSettingsChanged();
+    });
+    connect(ui->spinBoxQrSize, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.setQrCodeSizePercent(value);
+        emit qrCodeSettingsChanged();
+    });
+    connect(ui->spinBoxQrOffsetX, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.setQrCodeOffsetX(value);
+        emit qrCodeSettingsChanged();
+    });
+    connect(ui->spinBoxQrOffsetY, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        m_settings.setQrCodeOffsetY(value);
+        emit qrCodeSettingsChanged();
+    });
+    ui->btnQrFgColor->setStyleSheet(colorSwatchStyleSheet(m_settings.qrCodeFgColor()));
+    ui->btnQrBgColor->setStyleSheet(colorSwatchStyleSheet(m_settings.qrCodeBgColor()));
+    connect(ui->btnQrFgColor, &QPushButton::clicked, this, [this]() {
+        const QColor color = QColorDialog::getColor(m_settings.qrCodeFgColor(), this, "Select QR code color");
+        if (!color.isValid())
+            return;
+        m_settings.setQrCodeFgColor(color);
+        ui->btnQrFgColor->setStyleSheet(colorSwatchStyleSheet(color));
+        emit qrCodeSettingsChanged();
+    });
+    connect(ui->btnQrBgColor, &QPushButton::clicked, this, [this]() {
+        const QColor color = QColorDialog::getColor(m_settings.qrCodeBgColor(), this, "Select QR code background color");
+        if (!color.isValid())
+            return;
+        m_settings.setQrCodeBgColor(color);
+        ui->btnQrBgColor->setStyleSheet(colorSwatchStyleSheet(color));
+        emit qrCodeSettingsChanged();
+    });
     ui->cbxRotShowNextSong->setChecked(m_settings.rotationShowNextSong());
     ui->checkBoxCdgPrescaling->setChecked(m_settings.cdgPrescalingEnabled());
     ui->checkBoxCurrentSingerTop->setChecked(m_settings.rotationAltSortOrder());

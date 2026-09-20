@@ -63,6 +63,28 @@ protected:
 };
 
 
+// Draws a QR code (and an optional caption) over the singer display, in a corner
+// chosen in the settings.  Used to point patrons at the song request page.
+class QrOverlayWidget : public QWidget {
+Q_OBJECT
+public:
+    explicit QrOverlayWidget(QWidget *parent = nullptr);
+    // Re-reads the settings, regenerates the code and places it in the given area
+    // (the video/lyrics area, in parent coordinates).
+    void applyTo(const QRect &area);
+
+protected:
+    void paintEvent(QPaintEvent *) override;
+
+private:
+    Settings m_settings;
+    QImage m_image;
+    QRect m_area;
+
+    void render();
+    void reposition();
+};
+
 namespace Ui {
     class DlgCdg;
 }
@@ -83,7 +105,9 @@ private:
     MediaBackend &m_kmb;
     MediaBackend &m_bmb;
     std::unique_ptr<TransparentWidget> m_tWidget;
+    std::unique_ptr<QrOverlayWidget> m_qrWidget;
     Settings m_settings;
+    [[nodiscard]] QRect videoArea() const;
 
 public:
     explicit DlgCdg(MediaBackend &KaraokeBackend, MediaBackend &BreakBackend, QWidget *parent = nullptr,
@@ -118,8 +142,10 @@ public slots:
     void alertBgColorChanged(const QColor &color);
     void alertTxtColorChanged(const QColor &color);
     void setSlideshowInterval(int secs);
+    void qrCodeSettingsChanged();
 
 protected:
+    void resizeEvent(QResizeEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;

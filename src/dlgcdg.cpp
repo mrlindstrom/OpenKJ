@@ -20,12 +20,16 @@
 
 #include "dlgcdg.h"
 #include "ui_dlgcdg.h"
+#include "qrcodegen.h"
 #include <QDesktopWidget>
 #include <QSvgRenderer>
 #include <QPainter>
 #include <QDir>
 #include <QImageReader>
 #include <QScreen>
+#include <QFontMetrics>
+#include <QResizeEvent>
+#include <algorithm>
 
 
 VideoDisplay *DlgCdg::getVideoDisplay()
@@ -42,6 +46,7 @@ DlgCdg::DlgCdg(MediaBackend &KaraokeBackend, MediaBackend &BreakBackend, QWidget
     QDialog(parent, f), ui(new Ui::DlgCdg), m_kmb(KaraokeBackend), m_bmb(BreakBackend)
 {
     ui->setupUi(this);
+    m_qrWidget = std::make_unique<QrOverlayWidget>(this);
     m_tWidget = std::make_unique<TransparentWidget>(this);
     m_tWidget->setObjectName("DurationTimer");
     m_tWidget->show();
@@ -87,6 +92,7 @@ DlgCdg::DlgCdg(MediaBackend &KaraokeBackend, MediaBackend &BreakBackend, QWidget
     if (m_settings.bgMode() == Settings::BG_MODE_SLIDESHOW)
         m_timerSlideShow.start(static_cast<int>(m_settings.slideShowInterval() * 1000));
     ui->videoDisplayBm->hide();
+    qrCodeSettingsChanged();
     if (!m_settings.showCdgWindow())
         hide();
     else
@@ -171,6 +177,8 @@ QFileInfoList DlgCdg::getSlideShowImages()
 
 void DlgCdg::showAlert(bool show)
 {
+    // Re-place the QR code once the widget swap below has been applied.
+    QTimer::singleShot(0, this, [this]() { qrCodeSettingsChanged(); });
     if ((show) && (m_settings.karaokeAAAlertEnabled()))
     {
         ui->videoDisplayKar->hide();
@@ -189,6 +197,30 @@ void DlgCdg::showAlert(bool show)
             ui->videoDisplayKar->show();
         }
     }
+}
+
+// Area the video/lyrics occupy, which is what the QR code is positioned against.
+// Excludes the ticker at the bottom and honours the fullscreen offsets.
+QRect DlgCdg::videoArea() const
+{
+    if (ui->widgetAlert->isVisible())
+        return ui->widgetAlert->geometry();
+    if (ui->videoDisplayBm->isVisible())
+        return ui->videoDisplayBm->geometry();
+    return ui->videoDisplayKar->geometry();
+}
+
+void DlgCdg::qrCodeSettingsChanged()
+{
+    m_qrWidget->applyTo(videoArea());
+    m_qrWidget->raise();
+}
+
+void DlgCdg::resizeEvent(QResizeEvent *event)
+{
+    QDialog::resizeEvent(event);
+    // The code is sized as a percentage of the display height, so it is rebuilt on resize.
+    qrCodeSettingsChanged();
 }
 
 void DlgCdg::setNextSinger(const QString &name)
@@ -464,4 +496,116 @@ void TransparentWidget::setTextFont(const QFont &font) {
 
 void TransparentWidget::resetPosition() {
     move(0,0);
+}
+
+
+QrOverlayWidget::QrOverlayWidget(QWidget *parent)
+        : QWidget(parent)
+{
+    setAttribute(Qt::WA_TransparentForMouseEvents);
+    setFocusPolicy(Qt::NoFocus);
+    hide();
+}
+
+void QrOverlayWidget::applyTo(const QRect &area)
+{
+    m_area = area;
+    render();
+    reposition();
+}
+
+void QrOverlayWidget::render()
+{
+    m_image = QImage();
+    const QString url = m_settings.qrCodeUrl().trimmed();
+    if (!m_settings.qrCodeEnabled() || url.isEmpty() || parentWidget() == nullptr) {
+        hide();
+        return;
+    }
+
+    const QrCode code = QrCode::encodeText(url);
+    if (!code.isValid()) {
+        hide();
+        return;
+    }
+
+    // Size the code as a percentage of the display height, then round the module size
+    // down to whole pixels so the code stays sharp and scannable.
+    const int areaHeight = m_area.height() > 0 ? m_area.height() : parentWidget()->height();
+    const int quietZone = 3; // light modules of margin, needed for scanning
+    const int targetPx = std::max(40, areaHeight * m_settings.qrCodeSizePercent() / 100);
+    const int modules = code.size() + quietZone * 2;
+    const int moduleSize = std::max(1, targetPx / modules);
+    const int codePx = moduleSize * modules;
+
+    const QString caption = m_settings.qrCodeCaption().trimmed();
+    QFont captionFont = font();
+    int captionHeight = 0;
+    if (!caption.isEmpty()) {
+        // Scale the caption to the width of the code, within sensible limits.
+        int pointSize = std::max(6, codePx / 14);
+        captionFont.setPointSize(pointSize);
+        captionFont.setBold(true);
+        QFontMetrics fm(captionFont);
+        while (pointSize > 6 && fm.boundingRect(caption).width() > codePx - moduleSize * 2) {
+            pointSize--;
+            captionFont.setPointSize(pointSize);
+            fm = QFontMetrics(captionFont);
+        }
+        captionHeight = fm.height() + moduleSize * 2;
+    }
+
+    const QColor fgColor = m_settings.qrCodeFgColor();
+    const QColor bgColor = m_settings.qrCodeBgColor();
+
+    m_image = QImage(codePx, codePx + captionHeight, QImage::Format_ARGB32_Premultiplied);
+    m_image.fill(bgColor);
+    QPainter painter(&m_image);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(fgColor);
+    for (int y = 0; y < code.size(); y++) {
+        for (int x = 0; x < code.size(); x++) {
+            if (code.module(x, y))
+                painter.drawRect((x + quietZone) * moduleSize, (y + quietZone) * moduleSize, moduleSize, moduleSize);
+        }
+    }
+    if (captionHeight > 0) {
+        painter.setPen(fgColor);
+        painter.setFont(captionFont);
+        // Drawn below the code so the quiet zone around it stays clear for scanners.
+        painter.drawText(QRect(0, codePx, codePx, captionHeight), Qt::AlignHCenter | Qt::AlignVCenter, caption);
+    }
+    painter.end();
+
+    setFixedSize(m_image.size());
+    show();
+    update();
+}
+
+void QrOverlayWidget::reposition()
+{
+    if (m_image.isNull())
+        return;
+    const QRect area = m_area;
+
+    // A small default margin so the code isn't flush against the edge, plus the user's offsets.
+    const int margin = std::max(4, area.height() / 100);
+    const int offsetX = m_settings.qrCodeOffsetX();
+    const int offsetY = m_settings.qrCodeOffsetY();
+    const int corner = m_settings.qrCodeCorner();
+    const bool right = (corner == 1 || corner == 3);
+    const bool bottom = (corner == 2 || corner == 3);
+
+    int x = right ? area.right() + 1 - margin - width() - offsetX : area.left() + margin + offsetX;
+    int y = bottom ? area.bottom() + 1 - margin - height() - offsetY : area.top() + margin + offsetY;
+    move(x, y);
+}
+
+void QrOverlayWidget::paintEvent(QPaintEvent *)
+{
+    if (m_image.isNull())
+        return;
+    QPainter painter(this);
+    painter.drawImage(0, 0, m_image);
 }

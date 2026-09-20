@@ -995,6 +995,231 @@ QPushButton:default {
                   </layout>
                  </widget>
                 </item>
+                <item>
+                 <widget class="QGroupBox" name="groupBoxQrCode">
+                  <property name="title">
+                   <string>Show QR code on singer display</string>
+                  </property>
+                  <property name="checkable">
+                   <bool>true</bool>
+                  </property>
+                  <layout class="QGridLayout" name="gridLayoutQr">
+                   <item row="0" column="0">
+                    <widget class="QLabel" name="lblQrUrl">
+                     <property name="text">
+                      <string>URL</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="0" column="1" colspan="3">
+                    <widget class="QLineEdit" name="lineEditQrUrl">
+                     <property name="toolTip">
+                      <string>Web address the QR code points to, for example your song request page.</string>
+                     </property>
+                     <property name="placeholderText">
+                      <string>https://example.com/requests</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="0">
+                    <widget class="QLabel" name="lblQrCaption">
+                     <property name="text">
+                      <string>Caption</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="1" colspan="3">
+                    <widget class="QLineEdit" name="lineEditQrCaption">
+                     <property name="toolTip">
+                      <string>Optional text shown under the QR code.  Leave blank for no caption.</string>
+                     </property>
+                     <property name="placeholderText">
+                      <string>Scan to request a song</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="2" column="0">
+                    <widget class="QLabel" name="lblQrCorner">
+                     <property name="text">
+                      <string>Corner</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="2" column="1">
+                    <widget class="QComboBox" name="comboBoxQrCorner">
+                     <item>
+                      <property name="text">
+                       <string>Top left</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>Top right</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>Bottom left</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>Bottom right</string>
+                      </property>
+                     </item>
+                    </widget>
+                   </item>
+                   <item row="2" column="2">
+                    <widget class="QLabel" name="lblQrSize">
+                     <property name="text">
+                      <string>Size (% of display height)</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="2" column="3">
+                    <widget class="QSpinBox" name="spinBoxQrSize">
+                     <property name="minimum">
+                      <number>2</number>
+                     </property>
+                     <property name="maximum">
+                      <number>60</number>
+                     </property>
+                     <property name="value">
+                      <number>15</number>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="0">
+                    <widget class="QLabel" name="lblQrOffsetX">
+                     <property name="text">
+                      <string>Horizontal offset (px)</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="1">
+                    <widget class="QSpinBox" name="spinBoxQrOffsetX">
+                     <property name="toolTip">
+                      <string>Extra distance from the selected corner.  Positive values move the code further in from the edge.</string>
+                     </property>
+                     <property name="minimum">
+                      <number>-4000</number>
+                     </property>
+                     <property name="maximum">
+                      <number>4000</number>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="2">
+                    <widget class="QLabel" name="lblQrOffsetY">
+                     <property name="text">
+                      <string>Vertical offset (px)</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="3">
+                    <widget class="QSpinBox" name="spinBoxQrOffsetY">
+                     <property name="toolTip">
+                      <string>Extra distance from the selected corner.  Positive values move the code further in from the edge.</string>
+                     </property>
+                     <property name="minimum">
+                      <number>-4000</number>
+                     </property>
+                     <property name="maximum">
+                      <number>4000</number>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="0">
+                    <widget class="QLabel" name="lblQrFgColor">
+                     <property name="text">
+                      <string>Code color</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="1">
+                    <widget class="QPushButton" name="btnQrFgColor">
+                     <property name="toolTip">
+                      <string>Colour of the code itself.  Dark on a light background scans most reliably.</string>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">QPushButton {
+    border: 2px solid #8f8f91;
+    border-radius: 6px;
+    background-color: rgb(0,0,0);
+    min-width: 40px;
+    padding-left: 5px;
+    padding-right: 5px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
+QPushButton:pressed {
+    background-color: rgb(0,0,0);
+}
+
+QPushButton:flat {
+    border: none; /* no border for a flat push button */
+}
+
+QPushButton:default {
+    border-color: navy; /* make the default button prominent */
+}</string>
+                     </property>
+                     <property name="text">
+                      <string/>
+                     </property>
+                     <property name="autoDefault">
+                      <bool>false</bool>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="2">
+                    <widget class="QLabel" name="lblQrBgColor">
+                     <property name="text">
+                      <string>Background color</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="3">
+                    <widget class="QPushButton" name="btnQrBgColor">
+                     <property name="toolTip">
+                      <string>Colour of the panel behind the code.  A light background scans most reliably.</string>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">QPushButton {
+    border: 2px solid #8f8f91;
+    border-radius: 6px;
+    background-color: rgb(255,255,255);
+    min-width: 40px;
+    padding-left: 5px;
+    padding-right: 5px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
+QPushButton:pressed {
+    background-color: rgb(255,255,255);
+}
+
+QPushButton:flat {
+    border: none; /* no border for a flat push button */
+}
+
+QPushButton:default {
+    border-color: navy; /* make the default button prominent */
+}</string>
+                     </property>
+                     <property name="text">
+                      <string/>
+                     </property>
+                     <property name="autoDefault">
+                      <bool>false</bool>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </widget>
+                </item>
                </layout>
               </widget>
              </widget>

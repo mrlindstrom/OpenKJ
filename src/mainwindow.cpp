@@ -1785,6 +1785,7 @@ void MainWindow::actionSettingsTriggered() {
     connect(settingsDialog, &DlgSettings::bgSlideShowDirChanged, cdgWindow.get(), &DlgCdg::applyBackgroundImageMode);
     connect(settingsDialog, &DlgSettings::cdgBgImageChanged, cdgWindow.get(), &DlgCdg::applyBackgroundImageMode);
     connect(settingsDialog, &DlgSettings::cdgOffsetsChanged, cdgWindow.get(), &DlgCdg::cdgOffsetsChanged);
+    connect(settingsDialog, &DlgSettings::qrCodeSettingsChanged, cdgWindow.get(), &DlgCdg::qrCodeSettingsChanged);
     connect(settingsDialog, &DlgSettings::cdgRemainBgColorChanged, cdgWindow->durationWidget(), &TransparentWidget::setBackgroundColor);
     connect(settingsDialog, &DlgSettings::cdgRemainEnabledChanged, cdgWindow->durationWidget(), &TransparentWidget::setVisible);
     connect(settingsDialog, &DlgSettings::cdgRemainFontChanged, cdgWindow->durationWidget(), &TransparentWidget::setTextFont);

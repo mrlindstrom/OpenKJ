@@ -146,6 +146,15 @@ public:
     bool tickerEnabled();
     QString tickerCustomString();
     void setTickerCustomString(const QString &value);
+    bool qrCodeEnabled();
+    QString qrCodeUrl();
+    QString qrCodeCaption();
+    int qrCodeCorner();
+    int qrCodeSizePercent();
+    int qrCodeOffsetX();
+    int qrCodeOffsetY();
+    QColor qrCodeFgColor();
+    QColor qrCodeBgColor();
     bool tickerShowRotationInfo();
     bool requestServerEnabled();
     void setRequestServerEnabled(bool enable);
@@ -316,9 +325,19 @@ signals:
     void videoOffsetChanged(int offsetMs);
     void lastSingerAddPositionTypeChanged(int type);
     void shortcutsChanged();
+    void qrCodeSettingsChanged();
 
 
 public slots:
+    void setQrCodeEnabled(bool enabled);
+    void setQrCodeUrl(const QString &url);
+    void setQrCodeCaption(const QString &caption);
+    void setQrCodeCorner(int corner);
+    void setQrCodeSizePercent(int percent);
+    void setQrCodeOffsetX(int offset);
+    void setQrCodeOffsetY(int offset);
+    void setQrCodeFgColor(QColor color);
+    void setQrCodeBgColor(QColor color);
     void setShowMainWindowVideo(bool show);
     void setTreatAllSingersAsRegs(bool enabled);
     void setRotationAltSortOrder(bool enabled);

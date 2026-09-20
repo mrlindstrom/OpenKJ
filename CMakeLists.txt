@@ -436,6 +436,7 @@ set(SOURCE_FILES
         src/dlgregularsingers.cpp
         src/dlgsettings.cpp
         src/dlgcdg.cpp
+        src/qrcodegen.cpp
         src/okarchive.cpp
         src/models/tablemodelbreaksongs.cpp
         src/models/tablemodelcustomnamingpatterns.cpp
@@ -497,6 +498,7 @@ set(SOURCE_FILES
         src/dlgregularsingers.h
         src/dlgsettings.h
         src/dlgcdg.h
+        src/qrcodegen.h
         src/okarchive.h
         src/models/tablemodelbreaksongs.h
         src/models/tablemodelcustomnamingpatterns.h
