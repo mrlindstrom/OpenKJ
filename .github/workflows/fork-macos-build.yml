@@ -76,14 +76,37 @@ jobs:
 
     - name: install deps
       run: |
-        brew install cmake ninja pkgconf cppunit utf8cpp qt@5 gstreamer
+        brew install cmake ninja pkgconf cppunit utf8cpp qt@5
         pip install osxrelocator
+
+    # Build against GStreamer's own macOS framework rather than the Homebrew formula, so the
+    # framework can be copied into the .app and the result runs on Macs without GStreamer.
+    - name: Install GStreamer framework
+      env:
+        GST_VERSION: '1.28.7'
+      run: |
+        curl -sSfL -o gstreamer.pkg "https://gstreamer.freedesktop.org/data/pkg/osx/${GST_VERSION}/gstreamer-1.0-${GST_VERSION}-universal.pkg"
+        curl -sSfL -o gstreamer-devel.pkg "https://gstreamer.freedesktop.org/data/pkg/osx/${GST_VERSION}/gstreamer-1.0-devel-${GST_VERSION}-universal.pkg"
+        sudo installer -pkg gstreamer.pkg -target /
+        sudo installer -pkg gstreamer-devel.pkg -target /
+        ls -l /Library/Frameworks/GStreamer.framework/Versions/
+
+    # The build copies GStreamer.framework.dist into the bundle.  Make that copy here, without
+    # the development files, so the shipped app stays a reasonable size.
+    - name: Prepare GStreamer framework copy for bundling
+      run: |
+        sudo cp -R /Library/Frameworks/GStreamer.framework /Library/Frameworks/GStreamer.framework.dist
+        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/Headers
+        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/include
+        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/share/gtk-doc
+        sudo find /Library/Frameworks/GStreamer.framework.dist -name '*.a' -delete
+        du -sh /Library/Frameworks/GStreamer.framework.dist
 
     - name: Build
       env:
         LDFLAGS: "-L/opt/homebrew/opt/qt@5/lib"
         CPPFLAGS: "-I/opt/homebrew/opt/qt@5/include"
-        PKG_CONFIG_PATH: "/opt/homebrew/opt/qt@5/lib/pkgconfig"
+        PKG_CONFIG_PATH: "/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig:/opt/homebrew/opt/qt@5/lib/pkgconfig"
         QT_DIR: "/opt/homebrew/opt/qt@5/"
         Qt5_DIR: "/opt/homebrew/opt/qt@5/"
       run: |
