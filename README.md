@@ -1,7 +1,37 @@
-[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/OpenKJ/OpenKJ.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/OpenKJ/OpenKJ/context:cpp)
-[![Copr build status](https://copr.fedorainfracloud.org/coprs/openkj/OpenKJ-unstable/package/openkjtools/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/openkj/OpenKJ-unstable/package/openkjtools/)
-[![Windows Build](https://github.com/OpenKJ/OpenKJ/actions/workflows/windows-test.yml/badge.svg)](https://github.com/OpenKJ/OpenKJ/actions/workflows/windows-test.yml)
-[![Test building on macOS](https://github.com/OpenKJ/OpenKJ/actions/workflows/macos-test.yml/badge.svg)](https://github.com/OpenKJ/OpenKJ/actions/workflows/macos-test.yml)
+[![Windows Build](https://github.com/mrlindstrom/OpenKJ/actions/workflows/fork-windows-build.yml/badge.svg)](https://github.com/mrlindstrom/OpenKJ/actions/workflows/fork-windows-build.yml)
+[![macOS Build](https://github.com/mrlindstrom/OpenKJ/actions/workflows/fork-macos-build.yml/badge.svg)](https://github.com/mrlindstrom/OpenKJ/actions/workflows/fork-macos-build.yml)
+
+**This is a fork of [OpenKJ/OpenKJ](https://github.com/OpenKJ/OpenKJ).**  Builds from this
+repository are published under [Releases](https://github.com/mrlindstrom/OpenKJ/releases) and are
+not official OpenKJ builds.  They are unsigned, so Windows SmartScreen and macOS Gatekeeper will
+warn about them.
+
+Changes in this fork
+====================
+
+**QR code on the singer display**  
+A QR code can be shown on the singer screen, pointing at whatever URL you like — typically your
+song request page, so patrons can scan it and request songs from their phones.  The code, its
+caption, its corner, its size and its colors are all configurable under
+**Settings → Video → Show QR code on singer display**.  Changes take effect immediately, so the
+position can be tuned with the singer window open.
+
+**Faster karaoke database updates**  
+Running Update on the karaoke database no longer competes with the background song-length scanner,
+which previously made an update slower than clearing the database and rescanning from scratch.
+Looking up songs, saving song lengths and detecting moved files are all much cheaper on large
+libraries.
+
+**Faster break music database updates**  
+Break music updates now read tags only for files that aren't already in the database, instead of
+re-reading every file on every update, and save them in a single batch.  More audio formats
+(FLAC, WAV, M4A, WMA, Opus) are read with TagLib rather than GStreamer, which is considerably
+faster, and filenames with accented or non-Latin characters now import correctly on Windows.
+
+**Build and CI**  
+The Windows build finds the MSVC GStreamer package automatically, and GitHub Actions workflows
+build Windows and macOS installers and publish a release when a version tag is pushed.
+
 
 **Downloads**  
 If you are looking for installers for Windows or macOS, please visit the Downloads section at https://openkj.org
@@ -30,6 +60,7 @@ A few features:
 * Option to use a custom background or display a rotating slide show on the CDG output dialog while idle
 * Fades break music in and out automatically when karaoke tracks start/end
 * Remote request server integration allowing singers to look up and submit songs via the web or mobile apps
+* Configurable QR code on the singer display for pointing patrons at the request page (this fork)
 * Automatic performance recording
 * Autoplay karaoke mode
 * Lots of other little things
