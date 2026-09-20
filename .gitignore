@@ -54,4 +54,6 @@ CMakeSettings.json
 .vs
 
 # CLion
-.idea
+.ideaClaude outputs/
+aqtinstall.log
+build/
