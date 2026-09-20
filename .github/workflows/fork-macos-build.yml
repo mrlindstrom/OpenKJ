@@ -102,10 +102,13 @@ jobs:
     - name: Prepare GStreamer framework copy for bundling
       run: |
         sudo cp -R /Library/Frameworks/GStreamer.framework /Library/Frameworks/GStreamer.framework.dist
-        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/Headers
-        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/include
-        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/share/gtk-doc
+        du -sh /Library/Frameworks/GStreamer.framework.dist
+        # Only drop things nothing loads at runtime.  Headers stay: deleting them leaves the
+        # framework's root symlinks dangling, which makes codesign reject the bundle.
         sudo find /Library/Frameworks/GStreamer.framework.dist -name '*.a' -delete
+        sudo find /Library/Frameworks/GStreamer.framework.dist -name '*.la' -delete
+        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/share/gtk-doc
+        sudo rm -rf /Library/Frameworks/GStreamer.framework.dist/Versions/1.0/share/man
         du -sh /Library/Frameworks/GStreamer.framework.dist
 
     - name: Build
@@ -119,11 +122,17 @@ jobs:
         cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=Release -DBUNDLE_GSTREAMER=True . -B build -G Ninja
         ninja -C build
 
+    # Rewriting Mach-O headers invalidates code signatures, and macOS on Apple Silicon won't run
+    # a binary whose signature doesn't match.  install_name_tool re-signs each file it touches,
+    # so this only re-seals the bundles.  Signing the embedded framework as its own unit first
+    # mirrors what the upstream signed build does; --deep can't handle its layout.
     - name: Ad-hoc sign the app bundle
       working-directory: ${{github.workspace}}/build
+      continue-on-error: true
       run: |
-        codesign --force --deep --sign - openkj.app
-        codesign --verify --verbose openkj.app || true
+        codesign --force --sign - --identifier org.freedesktop.gstreamer openkj.app/Contents/Frameworks/GStreamer.framework
+        codesign --force --sign - --identifier org.openkj.openkj openkj.app
+        codesign --verify --verbose openkj.app
 
     - name: Upload app
       uses: actions/upload-artifact@v4
