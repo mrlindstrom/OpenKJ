@@ -10,6 +10,11 @@ on:
     tags:
       - '*.*.*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release to attach the installer to, replacing any installer already there (e.g. 2.2.0). Leave blank to just build.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -48,6 +53,10 @@ jobs:
           BRANCH="unstable"
         fi
         OKJVER=${{ steps.get_version.outputs.version-without-v }}
+        if [ -n "${{ inputs.release_tag }}" ]; then
+          OKJVER="${{ inputs.release_tag }}"
+          OKJVER="${OKJVER#v}"
+        fi
         FN="OpenKJ-${OKJVER}-osx-installer.pkg"
         echo "installer_fn=${FN}" >> $GITHUB_ENV
         echo "rtype=${RTYPE}" >> $GITHUB_ENV
@@ -208,6 +217,24 @@ jobs:
 #      uses: devbotsxyz/xcode-staple@v1
 #      with:
 #        product-path: ${{ github.workspace }}/build/${{ env.installer_fn }}
+
+    - name: Upload installer
+      uses: actions/upload-artifact@v4
+      with:
+        path: build/${{ env.installer_fn }}
+        name: ${{ env.installer_fn }}
+
+    # Manual runs with a release_tag replace the installer on that existing release, so a fixed
+    # build can be swapped in without re-tagging.  --clobber overwrites a same-named asset.
+    - name: Attach installer to existing release
+      if: inputs.release_tag != ''
+      working-directory: ${{github.workspace}}/build
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release view "${{ inputs.release_tag }}" --repo "${{ github.repository }}" > /dev/null
+        gh release upload "${{ inputs.release_tag }}" "${{ env.installer_fn }}" --clobber --repo "${{ github.repository }}"
+        echo "Attached ${{ env.installer_fn }} to release ${{ inputs.release_tag }}"
 
     - name: Release
       uses: softprops/action-gh-release@v2
