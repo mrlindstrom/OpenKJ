@@ -134,6 +134,9 @@ jobs:
         # The GStreamer copy comes from a root-owned framework copied with permissions preserved;
         # codesign can't rewrite read-only files and reports it as an "internal error".
         chmod -R u+w openkj.app
+        # GStreamer's package ships a stray .gitignore at the framework root.  A framework root may
+        # only hold symlinks and Versions/, so that one file stops the framework being sealed.
+        find openkj.app/Contents/Frameworks/GStreamer.framework -maxdepth 1 -type f -print -delete
         signed=0
         while IFS= read -r f; do
           if file "$f" | grep -q 'Mach-O'; then
@@ -143,13 +146,13 @@ jobs:
         done < <(find openkj.app/Contents -type f | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
         echo "signed $signed Mach-O files"
         for fw in openkj.app/Contents/Frameworks/*.framework; do
-          codesign --force --sign - "$fw" 2>/dev/null || echo "note: could not seal $(basename "$fw") as a bundle"
+          codesign --force --sign - "$fw"
         done
-        codesign --force --sign - openkj.app || echo "note: could not seal openkj.app as a bundle"
+        codesign --force --sign - openkj.app
+        codesign --verify --strict --verbose=1 openkj.app
 
-        # Check each library's own signature, which is what macOS enforces when loading code.
-        # (A strict whole-bundle check fails on the GStreamer framework's layout, which doesn't
-        # stop the app launching.)
+        # Also check each library's own signature, which is what macOS enforces when loading code,
+        # so a bad file is named in the log rather than hidden behind a bundle-level error.
         bad=0
         while IFS= read -r f; do
           if file "$f" | grep -q 'Mach-O'; then
@@ -157,8 +160,6 @@ jobs:
           fi
         done < <(find openkj.app/Contents/Frameworks openkj.app/Contents/PlugIns -type f)
         codesign --display --verbose=1 openkj.app/Contents/MacOS/openkj
-        echo "GStreamer.framework root (anything here other than symlinks is what codesign objects to):"
-        ls -la openkj.app/Contents/Frameworks/GStreamer.framework
         if [ "$bad" -gt 0 ]; then
           echo "$bad file(s) have invalid signatures"
           exit 1
