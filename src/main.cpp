@@ -23,6 +23,8 @@
 #include <QStyleFactory>
 #include <QSplashScreen>
 #include <QStringList>
+#include <QStandardPaths>
+#include <QDir>
 #include <QMessageBox>
 #include "settings.h"
 #include "idledetect.h"
@@ -164,6 +166,23 @@ int main(int argc, char *argv[]) {
     qputenv("GIO_EXTRA_MODULES", QString(appDir + "Frameworks/GStreamer.framework/Versions/Current/lib/gio/modules").toLocal8Bit());
     qWarning() << "MacOS detected, changed GST env vars to point to the bundled framework";
     qWarning() << qgetenv("GST_PLUGIN_SYSTEM_PATH") << endl << qgetenv("GST_PLUGIN_SCANNER") << endl << qgetenv("GTK_PATH") << endl << qgetenv("GIO_EXTRA_MODULES") << endl;
+#endif
+
+#ifdef Q_OS_WIN
+    // GStreamer normally checks its plugins in a separate gst-plugin-scanner.exe, which lives in
+    // libexec\gstreamer-1.0.  Windows resolves that process's DLLs from its own folder, then
+    // System32, then PATH - never OpenKJ's folder - so an older FFmpeg or GLib elsewhere on the
+    // machine gets loaded instead of the bundled one and plugins such as gstlibav fail.  Scanning
+    // inside OpenKJ.exe avoids that, because Windows always searches the exe's folder first.
+    if (qEnvironmentVariableIsEmpty("GST_REGISTRY_FORK"))
+        qputenv("GST_REGISTRY_FORK", "no");
+    // Keep OpenKJ's plugin cache separate from other GStreamer programs.  The shared cache can hold
+    // plugins another GStreamer install marked as broken, which would then stay disabled here too.
+    if (qEnvironmentVariableIsEmpty("GST_REGISTRY")) {
+        const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+        QDir().mkpath(cacheDir);
+        qputenv("GST_REGISTRY", QDir::toNativeSeparators(cacheDir + "/gstreamer-registry.bin").toLocal8Bit());
+    }
 #endif
 
     a.installEventFilter(filter);
