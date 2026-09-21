@@ -1,14 +1,13 @@
-# Fork build: compiles OpenKJ on every push and publishes a GitHub release when a
-# version tag (e.g. 1.2.3) is pushed.  Based on the upstream Windows Builds workflow,
-# with the code signing and openkj.org upload steps removed.
+# Fork build: compiles OpenKJ on every push as a build check, and uploads the installer as
+# a run artifact.  Releases are packaged locally with cd/package-windows.ps1 instead, so
+# this deliberately doesn't trigger on version tags.  Based on the upstream Windows Builds
+# workflow, with the code signing and openkj.org upload steps removed.
 name: Fork Windows Build
 
 on:
   push:
     branches:
       - '**'
-    tags:
-      - '*.*.*'
   workflow_dispatch:
 
 permissions:
