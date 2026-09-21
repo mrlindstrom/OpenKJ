@@ -122,17 +122,31 @@ jobs:
         cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=Release -DBUNDLE_GSTREAMER=True . -B build -G Ninja
         ninja -C build
 
-    # Rewriting Mach-O headers invalidates code signatures, and macOS on Apple Silicon won't run
-    # a binary whose signature doesn't match.  install_name_tool re-signs each file it touches,
-    # so this only re-seals the bundles.  Signing the embedded framework as its own unit first
-    # mirrors what the upstream signed build does; --deep can't handle its layout.
+    # macdeployqt and the relocator rewrite Mach-O headers with install_name_tool, which
+    # invalidates the files' code signatures, and macOS on Apple Silicon kills any process that
+    # loads a binary with an invalid signature.  So re-sign every Mach-O file individually,
+    # longest paths first so nested code is signed before whatever contains it, then seal the
+    # bundles.  Sealing the GStreamer framework can fail because of its layout; the files inside
+    # are already signed, which is what the loader checks, so that isn't fatal.
     - name: Ad-hoc sign the app bundle
       working-directory: ${{github.workspace}}/build
-      continue-on-error: true
       run: |
-        codesign --force --sign - --identifier org.freedesktop.gstreamer openkj.app/Contents/Frameworks/GStreamer.framework
-        codesign --force --sign - --identifier org.openkj.openkj openkj.app
-        codesign --verify --verbose openkj.app
+        # The GStreamer copy comes from a root-owned framework copied with permissions preserved;
+        # codesign can't rewrite read-only files and reports it as an "internal error".
+        chmod -R u+w openkj.app
+        signed=0
+        while IFS= read -r f; do
+          if file "$f" | grep -q 'Mach-O'; then
+            codesign --force --sign - "$f"
+            signed=$((signed + 1))
+          fi
+        done < <(find openkj.app/Contents -type f | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
+        echo "signed $signed Mach-O files"
+        for fw in openkj.app/Contents/Frameworks/*.framework; do
+          codesign --force --sign - "$fw" 2>/dev/null || echo "note: could not seal $(basename "$fw") as a bundle"
+        done
+        codesign --force --sign - openkj.app || echo "note: could not seal openkj.app as a bundle"
+        codesign --verify --strict --verbose=2 openkj.app/Contents/MacOS/openkj
 
     # The bundled framework's libraries use @rpath install names, so the only thing that has to be
     # rewritten is the executable's rpath.  Check that nothing still points at the system copy,
