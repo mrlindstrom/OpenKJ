@@ -134,6 +134,22 @@ jobs:
         codesign --force --sign - --identifier org.openkj.openkj openkj.app
         codesign --verify --verbose openkj.app
 
+    # The bundled framework's libraries use @rpath install names, so the only thing that has to be
+    # rewritten is the executable's rpath.  Check that nothing still points at the system copy,
+    # which is what would make the app fail on a Mac without GStreamer installed.
+    - name: Check the app bundle is self-contained
+      working-directory: ${{github.workspace}}/build
+      run: |
+        echo "rpaths in the app executable:"
+        otool -l openkj.app/Contents/MacOS/openkj | grep -A2 LC_RPATH | grep 'path ' || true
+        echo
+        echo "files still referencing the system GStreamer framework:"
+        if grep -rl --binary-files=text '/Library/Frameworks/GStreamer' openkj.app/Contents/MacOS openkj.app/Contents/Frameworks 2>/dev/null; then
+          echo "WARNING: the app may need GStreamer installed to run"
+        else
+          echo "none - bundle looks self-contained"
+        fi
+
     - name: Upload app
       uses: actions/upload-artifact@v4
       with:
