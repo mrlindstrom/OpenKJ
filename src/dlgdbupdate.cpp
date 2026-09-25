@@ -29,7 +29,15 @@ void DlgDbUpdate::changeStatusTxt(QString txt)
 
 void DlgDbUpdate::changeProgress(int progress, int max)
 {
-    ui->progressBar->setMaximum(std::max(max, progress));
+    if (max <= 0) {
+        // No total known yet (still searching for files) - a busy indicator is more honest
+        // than a bar sitting at zero.
+        ui->progressBar->setFormat("Working...");
+        ui->progressBar->setRange(0, 0);
+        return;
+    }
+    ui->progressBar->setFormat("%v of %m  (%p%)");
+    ui->progressBar->setRange(0, std::max(max, progress));
     ui->progressBar->setValue(progress);
 }
 
@@ -48,6 +56,8 @@ void DlgDbUpdate::timerEvent(QTimerEvent *event)
 void DlgDbUpdate::reset()
 {
     m_log.clear();
+    ui->progressBar->setFormat("%p%");
+    ui->progressBar->setRange(0, 1);
     ui->progressBar->setValue(0);
     ui->txtLog->clear();
     ui->lblCurrentActivity->setText("");

@@ -66,7 +66,11 @@ bool DbUpdater::process(const QList<QString> &paths, ProcessingOptions options)
 
     emit stateChanged("Checking files against database...");
     qInfo() << "Checking for new songs";
-    int progressMax = MAX(diskEnumerator.count(), dbEnumerator.count());
+    // Both lists are walked in step, so progress is what's been consumed of the two combined.
+    // (The old counter measured loop iterations against the larger list, which never lined up.)
+    const int progressTotal = diskEnumerator.count() + dbEnumerator.count();
+    emit progressChanged(0, progressTotal);
+    QApplication::processEvents();
 
     QStringList newFilesOnDisk; newFilesOnDisk.reserve(20000);
     QVector<DbSongRecord> filesMissingOnDisk;
@@ -112,11 +116,18 @@ bool DbUpdater::process(const QList<QString> &paths, ProcessingOptions options)
         }
         run++;
         if (shouldUpdateGui()) {
-            emit progressChanged(run, progressMax);
+            const int done = diskEnumerator.position() + dbEnumerator.position();
+            emit stateChanged(QString("Checking files against database...\n    %1 of %2 (%3 new, %4 missing)")
+                                      .arg(done)
+                                      .arg(progressTotal)
+                                      .arg(newFilesOnDisk.size())
+                                      .arg(filesMissingOnDisk.size()));
+            emit progressChanged(done, progressTotal);
             QApplication::processEvents();
         }
     }
     while (diskEnumerator.IsValid || dbEnumerator.IsValid);
+    emit progressChanged(progressTotal, progressTotal);
 
 
     if (options.testFlag(FixMovedFiles) && !newFilesOnDisk.empty() && !filesMissingOnDisk.empty()) {
@@ -140,7 +151,9 @@ void DbUpdater::addFilesToDatabase(const QList<QString> &files)
     if (files.empty())
         return;
 
-    emit stateChanged("Adding new files to database...")    ;
+    emit stateChanged(QString("Adding new files to database...\n    0 of %1").arg(files.size()));
+    emit progressChanged(0, files.size());
+    QApplication::processEvents();
 
     QSqlQuery query;
     query.exec("PRAGMA synchronous=OFF");
@@ -201,11 +214,14 @@ void DbUpdater::addFilesToDatabase(const QList<QString> &files)
         query.bindValue(":searchstring", fileInfo.completeBaseName() + " " + parser.getArtist() + " " + parser.getTitle() + " " + parser.getSongId());
         query.exec();
         if (shouldUpdateGui()) {
+            emit stateChanged(QString("Adding new files to database...\n    %1 of %2").arg(loops).arg(files.length()));
             emit progressChanged(loops, files.length());
-            //emit stateChanged(QString("Importing new files into the karaoke database... %1 of %2").arg(loops).arg(files.length()));
             QApplication::processEvents();
         }
     }
+    emit stateChanged(QString("Saving %1 new songs to the database...").arg(files.length()));
+    emit progressChanged(files.length(), files.length());
+    QApplication::processEvents();
     query.exec("COMMIT");
 
     emit progressMessage("Done processing new files.");
@@ -225,15 +241,23 @@ void DbUpdater::removeMissingFilesFromDatabase()
     if (m_missingFilesSongIds.empty())
         return;
 
-    emit stateChanged("Removing missing files from database...");
+    emit stateChanged(QString("Removing %1 missing files from database...").arg(m_missingFilesSongIds.size()));
+    emit progressChanged(0, m_missingFilesSongIds.size());
+    QApplication::processEvents();
 
     QSqlQuery query;
     query.exec("BEGIN TRANSACTION");
     query.prepare("DELETE FROM dbSongs WHERE [songid] = :id");
 
+    int removed{0};
     foreach(const int id, m_missingFilesSongIds) {
         query.bindValue(":id", id);
         query.exec();
+        removed++;
+        if (shouldUpdateGui()) {
+            emit progressChanged(removed, m_missingFilesSongIds.size());
+            QApplication::processEvents();
+        }
     }
 
     query.exec("DELETE FROM queueSongs WHERE [song] NOT IN (SELECT [songid] FROM dbSongs)");
@@ -374,6 +398,7 @@ void DbUpdater::DbEnumerator::prepareQuery(bool limitToPaths)
 void DbUpdater::DbEnumerator::readNextRecord()
 {
     if ((IsValid = m_dbSongs.next())) {
+        m_position++;
         CurrentRecord = DbSongRecord {
             .id =        m_dbSongs.value(0).toInt(),
             .isDropped = m_dbSongs.value(2).toBool(),
@@ -413,7 +438,9 @@ void DbUpdater::setPaths(const QList<QString> &paths)
 // and the entry is removed from the provided existing files list.
 void DbUpdater::fixMissingFiles(QVector<DbSongRecord> &filesMissingOnDisk, QStringList &newFilesOnDisk) {
 
-    emit stateChanged("Detecting and updating missing or moved files...");
+    emit stateChanged(QString("Detecting and updating missing or moved files...\n    0 of %1").arg(filesMissingOnDisk.size()));
+    emit progressChanged(0, filesMissingOnDisk.size());
+    QApplication::processEvents();
 
     int count{0};
     qInfo() << "Looking for missing files";
@@ -473,6 +500,10 @@ void DbUpdater::fixMissingFiles(QVector<DbSongRecord> &filesMissingOnDisk, QStri
         }
         count++;
         if (shouldUpdateGui()) {
+            emit stateChanged(QString("Detecting and updating missing or moved files...\n    %1 of %2 (%3 moved)")
+                                      .arg(count)
+                                      .arg(filesMissingOnDisk.size())
+                                      .arg(matchedNewPaths.size()));
             emit progressChanged(count, filesMissingOnDisk.size());
             QApplication::processEvents();
         }

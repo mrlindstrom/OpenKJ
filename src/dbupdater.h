@@ -79,6 +79,8 @@ private:
         void readNextDiskFile();
         void reset() { m_i_kar = -1; m_i_aud = 0; IsValid = false; }
         int count() { return m_karaokeFilesOnDisk.length(); }
+        // How many disk files have been consumed, for progress reporting.
+        [[nodiscard]] int position() const { return m_i_kar < 0 ? 0 : m_i_kar; }
     };
 
     class DbEnumerator
@@ -87,6 +89,7 @@ private:
         DbUpdater& m_parent;
         QSqlQuery m_dbSongs;
         int m_count{0};
+        int m_position{0};
 
     public:
         bool IsValid = false;
@@ -95,6 +98,8 @@ private:
         void prepareQuery(bool limitToPaths);
         void readNextRecord();
         [[nodiscard]] int count() const { return m_count; }
+        // How many database records have been consumed, for progress reporting.
+        [[nodiscard]] int position() const { return m_position; }
     };
 
     Settings m_settings;

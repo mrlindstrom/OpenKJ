@@ -60,6 +60,11 @@ QStringList BmDbUpdateThread::findMediaFiles(const QString& directory)
     QStringList files;
     QDir dir(directory);
     QDirIterator iterator(dir.absolutePath(), QDirIterator::Subdirectories);
+    // Searching a large or networked folder takes a while, so keep the dialog showing what's
+    // happening.  The progress bar has no total to work with yet, so it runs as a busy indicator.
+    QElapsedTimer guiTimer;
+    guiTimer.start();
+    emit progressChanged(0, 0);
     while (iterator.hasNext()) {
         iterator.next();
         if (!iterator.fileInfo().isDir()) {
@@ -72,6 +77,13 @@ QStringList BmDbUpdateThread::findMediaFiles(const QString& directory)
                     break;
                 }
             }
+        }
+        if (guiTimer.elapsed() > 200) {
+            guiTimer.restart();
+            emit stateChanged(QString("Searching for media files in %1\n    %2 found so far...")
+                                      .arg(directory)
+                                      .arg(files.size()));
+            QApplication::processEvents();
         }
     }
     return files;
@@ -154,6 +166,8 @@ void BmDbUpdateThread::startUnthreaded()
     emit stateChanged("Finding media files...");
     QApplication::processEvents();
     const QStringList allFiles = findMediaFiles(m_path);
+    emit stateChanged(QString("Checking %1 files against the database...").arg(allFiles.size()));
+    QApplication::processEvents();
     const QSet<QString> existing = existingPathsUnder(m_path, QSqlDatabase::database());
     QStringList files;
     files.reserve(allFiles.size());
@@ -162,11 +176,22 @@ void BmDbUpdateThread::startUnthreaded()
             files.append(f);
     }
     emit progressMessage("Found " + QString::number(allFiles.size()) + " files, " + QString::number(files.size()) + " new.");
+    if (files.isEmpty()) {
+        emit stateChanged(QString("No new files found in %1\n    %2 already in the database")
+                                  .arg(m_path)
+                                  .arg(allFiles.size()));
+        emit progressChanged(1, 1);
+        QApplication::processEvents();
+        return;
+    }
     QElapsedTimer guiTimer;
     guiTimer.start();
     QSqlQuery query;
-    emit stateChanged("Getting metadata and adding songs to the database");
+    // The total is known now, so the bar can show real progress from the first file onwards.
+    emit stateChanged(QString("Reading tags and adding songs to the database\n    0 of %1").arg(files.size()));
+    emit progressChanged(0, files.size());
     emit progressMessage("Getting metadata and adding songs to the database");
+    QApplication::processEvents();
     qInfo() << "Setting sqlite synchronous mode to OFF";
     query.exec("PRAGMA synchronous=OFF");
     qInfo() << query.lastError();
@@ -196,11 +221,16 @@ void BmDbUpdateThread::startUnthreaded()
         query.exec();
         if (guiTimer.elapsed() > 200) {
             guiTimer.restart();
+            emit stateChanged(QString("Reading tags and adding songs to the database\n    %1 of %2")
+                                      .arg(i + 1)
+                                      .arg(files.size()));
             emit progressChanged(i + 1, files.size());
             QApplication::processEvents();
         }
     }
+    emit stateChanged(QString("Saving %1 songs to the database...").arg(files.size()));
     emit progressChanged(files.size(), files.size());
+    QApplication::processEvents();
     query.exec("COMMIT");
     qInfo() << query.lastError();
     emit progressMessage("Finished processing files for directory: " + m_path);
