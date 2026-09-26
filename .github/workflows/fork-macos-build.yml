@@ -219,11 +219,19 @@ jobs:
           echo "none - bundle looks self-contained"
         fi
 
+    # Packed as a tarball first: a zipped .app loses symlinks, execute bits and its code
+    # signature, and GitHub zips the folder's contents rather than the bundle itself.
+    - name: Pack the app bundle
+      working-directory: ${{github.workspace}}/build
+      run: |
+        tar -czf "${{ github.workspace }}/openkj-app.tar.gz" openkj.app
+        ls -lh "${{ github.workspace }}/openkj-app.tar.gz"
+
     - name: Upload app
       uses: actions/upload-artifact@v4
       with:
-        path: build/openkj.app
-        name: ${{ inputs.sanitize == true && 'openkj-asan.app' || 'openkj.app' }}
+        path: openkj-app.tar.gz
+        name: ${{ inputs.sanitize == true && 'openkj-asan-app-tarball' || 'openkj-app-tarball' }}
 
     - name: Create installer
       if: inputs.sanitize != true
