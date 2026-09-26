@@ -71,13 +71,24 @@ void CdgImageFrame::copyCroppedImagedata(uchar *destbuffer)
 {
     uchar* src = m_image.bits();
     uchar* destpos = destbuffer;
+    const auto bytesPerLine = m_image.bytesPerLine();
+    const auto srcBytes = static_cast<qsizetype>(bytesPerLine) * m_image.height();
 
     for (auto y=0; y < cdg::FRAME_DIM_CROPPED.height(); y++)
     {
         auto curSrcLineNum = y + m_curVOffset;
-        auto srcLineOffset = m_image.bytesPerLine() * (12 + curSrcLineNum); // 12?
+        auto srcLineOffset = bytesPerLine * (12 + curSrcLineNum); // 12?
+        auto readOffset = srcLineOffset + m_borderLRBytes + m_curHOffset;
 
-        memcpy(destpos, src + srcLineOffset + m_borderLRBytes + m_curHOffset, cdg::FRAME_DIM_CROPPED.width());
+        // Never read outside the frame buffer, whatever the packet asked for.
+        if (readOffset < 0 || readOffset + cdg::FRAME_DIM_CROPPED.width() > srcBytes)
+        {
+            memset(destpos, 0, cdg::FRAME_DIM_CROPPED.width());
+        }
+        else
+        {
+            memcpy(destpos, src + readOffset, cdg::FRAME_DIM_CROPPED.width());
+        }
         destpos += cdg::FRAME_DIM_CROPPED.width();
     }
 
@@ -177,13 +188,13 @@ void CdgImageFrame::cmdScroll(const cdg::CdgScrollCmdData &scrollCmdData, const 
         for (auto i=0; i < 216; i++)
         {
             auto bits = m_image.scanLine(i);
-            unsigned char* tmpPixels[6];
+            unsigned char tmpPixels[6];
             memcpy(tmpPixels, bits, 6);
-            memcpy(bits, bits + (6 * m_bytesPerPixel), 294 * m_bytesPerPixel);
+            memmove(bits, bits + (6 * m_bytesPerPixel), 294 * m_bytesPerPixel);
             if (type == cdg::ScrollCopy)
                 memcpy(bits + m_borderRBytesOffset, tmpPixels, 6);
             else
-                memset(bits + m_borderLRBytes, scrollCmdData.color, 6);
+                memset(bits + m_borderRBytesOffset, scrollCmdData.color, 6);
         }
     }
     if (scrollCmdData.hSCmd == 1)
@@ -192,9 +203,9 @@ void CdgImageFrame::cmdScroll(const cdg::CdgScrollCmdData &scrollCmdData, const 
         for (auto i=0; i < 216; i++)
         {
             auto bits = m_image.scanLine(i);
-            unsigned char* tmpPixels[6];
+            unsigned char tmpPixels[6];
             memcpy(tmpPixels, bits + (m_bytesPerPixel * 294), 6);
-            memcpy(bits + (6 * m_bytesPerPixel), bits , 294 * m_bytesPerPixel);
+            memmove(bits + (6 * m_bytesPerPixel), bits , 294 * m_bytesPerPixel);
             if (type == cdg::ScrollCopy)
                 memcpy(bits, tmpPixels, 6);
             else
@@ -205,9 +216,9 @@ void CdgImageFrame::cmdScroll(const cdg::CdgScrollCmdData &scrollCmdData, const 
     {
         // scroll up 12px
         auto bits = m_image.bits();
-        unsigned char* tmpLines[3600]; // m_image.bytesPerLine() * 12
+        unsigned char tmpLines[3600]; // m_image.bytesPerLine() * 12
         memcpy(tmpLines, bits, m_image.bytesPerLine() * 12);
-        memcpy(bits, bits + m_image.bytesPerLine() * 12, 204 * m_image.bytesPerLine());
+        memmove(bits, bits + m_image.bytesPerLine() * 12, 204 * m_image.bytesPerLine());
         if (type == cdg::ScrollCopy)
             memcpy(bits + (204 * m_image.bytesPerLine()), tmpLines, m_image.bytesPerLine() * 12);
         else
@@ -217,9 +228,9 @@ void CdgImageFrame::cmdScroll(const cdg::CdgScrollCmdData &scrollCmdData, const 
     {
         // scroll down 12px
         auto bits = m_image.bits();
-        unsigned char* tmpLines[3600];
+        unsigned char tmpLines[3600];
         memcpy(tmpLines, bits + (m_image.bytesPerLine() * 204), m_image.bytesPerLine() * 12);
-        memcpy(bits + (m_image.bytesPerLine() * 12), bits, 204 * m_image.bytesPerLine());
+        memmove(bits + (m_image.bytesPerLine() * 12), bits, 204 * m_image.bytesPerLine());
         if (type == cdg::ScrollCopy)
             memcpy(bits, tmpLines, m_image.bytesPerLine() * 12);
         else

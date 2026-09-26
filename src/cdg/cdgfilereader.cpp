@@ -90,7 +90,7 @@ bool CdgFileReader::seek(int positionMS)
         rewind();
     }
 
-    while (m_next_image_pgk_idx < pkgIdx)
+    while (m_next_image_pgk_idx < pkgIdx && !isEOF())
     {
         readAndProcessNextPackage();
     }

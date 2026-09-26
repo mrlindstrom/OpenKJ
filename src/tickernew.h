@@ -2,8 +2,10 @@
 #define TICKERNEW_H
 
 #include <QObject>
+#include <QImage>
 #include <QPixmap>
 #include <QThread>
+#include <atomic>
 #include <settings.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/async_logger.h>
@@ -22,7 +24,7 @@ public:
     TickerImageCreator(QString TickerText, int targetWidth);
 
 signals:
-    void imageCreated(QPixmap image, int textWidth);
+    void imageCreated(QImage image, int textWidth);
 
 };
 
@@ -32,16 +34,16 @@ Q_OBJECT
 private:
     QMutex m_mutex;
     Settings m_settings;
-    bool m_stop{false};
+    std::atomic<bool> m_stop{false};
     QPixmap scrollImage;
     QString m_text;
     int m_height{0};
     int m_width{0};
     int m_txtWidth{1024};
     int curOffset{0};
-    bool m_textOverflows{false};
-    int m_speed{5};
-    bool m_textChanged{false};
+    std::atomic<bool> m_textOverflows{false};
+    std::atomic<int> m_speed{5};
+    std::atomic<bool> m_textChanged{false};
     std::string m_loggingPrefix{"[TickerThread]"};
     std::shared_ptr<spdlog::logger> m_logger;
 
@@ -55,7 +57,7 @@ public:
 public slots:
     void setWidth(int width);
     void setText(const QString &text, bool force = false);
-    void replaceImage(const QPixmap &image, int textWidth);
+    void replaceImage(const QImage &image, int textWidth);
     void refresh();
     void setSpeed(int speed);
 

@@ -130,15 +130,24 @@ bool SoftwareRenderVideoSink::pullSampleAndDrawImage()
         gst_buffer_map(info->buffer, info->bufferInfo, GST_MAP_READ);
         guint8 *rawFrame = info->bufferInfo->data;
 
-        QImage::Format qtFormat;
+        QImage::Format qtFormat = QImage::Format_Invalid;
 
         if (strcmp(format, "RGB16") == 0)
             qtFormat = QImage::Format_RGB16;
         else if (strcmp(format, "BGRx") == 0)
             qtFormat = QImage::Format_RGB32;
 
-        QImage frame(rawFrame, width, height, qtFormat, cleanupFunction, info);
-        m_buffer = frame;
+        if (qtFormat == QImage::Format_Invalid)
+        {
+            // Unknown format: constructing a QImage with an indeterminate
+            // format would read the buffer with the wrong stride/depth.
+            cleanupFunction(info);
+        }
+        else
+        {
+            QImage frame(rawFrame, width, height, qtFormat, cleanupFunction, info);
+            m_buffer = frame;
+        }
     }
     else
     {

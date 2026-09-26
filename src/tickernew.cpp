@@ -2,6 +2,7 @@
 
 #include <QPainter>
 #include <QFontMetrics>
+#include <algorithm>
 #include <QResizeEvent>
 #include <QMutex>
 #include <QApplication>
@@ -54,13 +55,10 @@ void TickerNew::run() {
 
 void TickerNew::stop()
 {
-    if (!m_mutex.tryLock(100))
-    {
-        m_logger->warn("{} stop() unable to lock m_mutex!", m_loggingPrefix);
-        return;
-    }
+    // m_stop is atomic and must be set unconditionally: bailing out here on a
+    // failed lock used to leave the thread running, after which wait() timed
+    // out and the QThread was destroyed while still executing run().
     m_stop = true;
-    m_mutex.unlock();
 }
 
 TickerNew::TickerNew()
@@ -131,7 +129,10 @@ void TickerNew::setSpeed(int speed)
     m_mutex.unlock();
 }
 
-void TickerNew::replaceImage(const QPixmap &image, int textWidth) {
+void TickerNew::replaceImage(const QImage &image, int textWidth) {
+    // Runs on the GUI thread (queued connection), which is the only thread
+    // allowed to construct a QPixmap.
+    auto pixmap = QPixmap::fromImage(image);
     if (!m_mutex.tryLock(1000))
     {
         m_logger->error("{} setText() unable to lock m_mutex!", m_loggingPrefix);
@@ -139,11 +140,10 @@ void TickerNew::replaceImage(const QPixmap &image, int textWidth) {
     }
     m_textChanged = true;
     m_textOverflows = false;
-    m_height = image.height();
-    image.width();
-    if (image.width() > m_width)
+    m_height = pixmap.height();
+    if (pixmap.width() > m_width)
         m_textOverflows = true;
-    scrollImage = image;
+    scrollImage = pixmap;
     m_txtWidth = textWidth;
     m_mutex.unlock();
 }
@@ -162,7 +162,14 @@ TickerDisplayWidget::TickerDisplayWidget(QWidget *parent)
 TickerDisplayWidget::~TickerDisplayWidget()
 {
     ticker->stop();
-    ticker->wait(1000);
+    if (!ticker->wait(5000))
+    {
+        m_logger->error("{} Ticker thread did not stop; leaking it rather than "
+                        "destroying a running QThread", m_loggingPrefix);
+        ticker->deleteLater();
+        ticker = nullptr;
+        return;
+    }
     delete ticker;
 }
 
@@ -252,7 +259,7 @@ void TickerImageCreator::run() {
 
     m_logger->info("{} Rendering ticker text: {}", m_loggingPrefix, m_tickerText);
     QFont tickerFont = settings.tickerFont();
-    QPixmap img;
+    QImage img;
     int imgHeight;
     int imgWidth;
     int txtWidth;
@@ -271,11 +278,20 @@ void TickerImageCreator::run() {
         drawText.append(m_tickerText + " • " + m_tickerText + " • ");
         imgWidth = QFontMetrics(tickerFont).size(Qt::TextSingleLine, drawText).width();
         txtWidth = txtWidth + QFontMetrics(tickerFont).size(Qt::TextSingleLine," • ").width();
-        img = QPixmap(imgWidth, imgHeight);
     }
     else {
         drawText = m_tickerText;
-        img = QPixmap(imgWidth, imgHeight);
+    }
+    // Guard against a degenerate font metric producing an empty image, which
+    // would make QPainter::begin() fail below.
+    imgWidth = std::max(imgWidth, 1);
+    imgHeight = std::max(imgHeight, 1);
+    txtWidth = std::max(txtWidth, 1);
+    img = QImage(imgWidth, imgHeight, QImage::Format_ARGB32_Premultiplied);
+    if (img.isNull())
+    {
+        m_logger->error("{} Failed to allocate ticker image ({}x{})", m_loggingPrefix, imgWidth, imgHeight);
+        return;
     }
     img.fill(settings.tickerBgColor());
     QPainter p;

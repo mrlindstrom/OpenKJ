@@ -30,6 +30,7 @@
 #include <QColor>
 #include <vector>
 #include <array>
+#include <algorithm>
 
 
 namespace cdg {
@@ -177,9 +178,11 @@ struct CdgScrollCmdData
         hScroll = (data[1] & 0x3F);
         vScroll = (data[2] & 0x3F);
         hSCmd = (hScroll & 0x30) >> 4;
-        hSOffset = (hScroll & 0x07);
+        // Clamp to the ranges the CDG spec allows (h: 0-5, v: 0-11). Corrupted
+        // packets can otherwise push the read window past the frame buffer.
+        hSOffset = std::clamp(hScroll & 0x07, 0, 5);
         vSCmd = (vScroll & 0x30) >> 4;
-        vSOffset = (vScroll & 0x0F);
+        vSOffset = std::clamp(vScroll & 0x0F, 0, 11);
     }
     char color;
     char hScroll;
