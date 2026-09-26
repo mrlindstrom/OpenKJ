@@ -69,7 +69,10 @@ void LazyDurationUpdateController::getSongsRequiringUpdate()
     m_logger->info("{} Finding songs with missing durations", m_loggingPrefix);
     files.clear();
     QSqlQuery query;
-    query.exec("SELECT path FROM dbsongs WHERE duration < 1 ORDER BY artist, title");
+    // -2 means "not read yet" and -1 means "tried and failed", so a file whose duration can't be
+    // read is not re-opened on every launch.  0 is what older versions stored for both cases, so
+    // those get one more attempt and are then marked one way or the other.
+    query.exec("SELECT path FROM dbsongs WHERE duration = -2 OR duration = 0 ORDER BY artist, title");
     files.reserve(query.size());
     while (query.next())
     {
@@ -86,7 +89,8 @@ void LazyDurationUpdateController::stopWork()
 void LazyDurationUpdateController::updateDbDuration(const QString& file, int duration)
 {
     // Batch DB writes instead of one auto-committed UPDATE (i.e. one SQLite transaction) per song.
-    m_pendingDurations.append(qMakePair(file, duration));
+    // A failed read is stored as -1 so the file isn't probed again on the next run.
+    m_pendingDurations.append(qMakePair(file, duration > 0 ? duration : -1));
     emit gotDuration(file, duration);
     if (m_pendingDurations.size() >= 250)
         flushPendingDurations();

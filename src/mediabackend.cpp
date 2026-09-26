@@ -768,6 +768,12 @@ void MediaBackend::buildPipeline()
 
     m_gstBusMsgHandlerTimer.start(40);
     connect(&m_gstBusMsgHandlerTimer, &QTimer::timeout, [&] () {
+        // Handlers below can run QApplication::processEvents(), which lets this timer fire
+        // again and re-enter the drain.  Processing the same bus from two nested loops has
+        // handlers acting on a pipeline another handler is in the middle of tearing down.
+        if (m_inBusMsgHandler)
+            return;
+        m_inBusMsgHandler = true;
         while (gst_bus_have_pending(m_bus))
         {
             auto msg = gst_bus_pop(m_bus);
@@ -776,6 +782,7 @@ void MediaBackend::buildPipeline()
             gstBusFunc(msg);
             gst_message_unref(msg);
         }
+        m_inBusMsgHandler = false;
     });
 
     m_logger->debug("{} Gstreamer pipeline build completed", m_loggingPrefix);

@@ -28,6 +28,7 @@
 #include <QFileDialog>
 #include <QImageReader>
 #include <QDesktopServices>
+#include <QTimer>
 #include "mzarchive.h"
 #include "tagreader.h"
 #include "dlgeditsong.h"
@@ -1998,10 +1999,12 @@ void MainWindow::karaokeMediaBackend_stateChanged(const MediaBackend::State &sta
     if (state == MediaBackend::EndOfMediaState) {
         m_logger->info("{} KAudio entered EndOfMediaState", m_loggingPrefix);
         audioRecorder.stop();
-//        ipcClient->send_MessageToServer(KhIPCClient::CMD_FADE_IN);
-        //m_mediaBackendBm.setVideoEnabled(true);
-        m_mediaBackendKar.stop(true);
-        m_mediaBackendBm.fadeIn(false);
+        // This handler runs while GStreamer is processing a bus message, so tearing the pipeline
+        // down here re-enters it mid state change.  Defer to the next pass of the event loop.
+        QTimer::singleShot(0, this, [this]() {
+            m_mediaBackendKar.stop(true);
+            m_mediaBackendBm.fadeIn(false);
+        });
     }
     if (state == MediaBackend::PausedState) {
         m_logger->info("{} KAudio entered PausedState", m_loggingPrefix);
@@ -2721,26 +2724,30 @@ void MainWindow::bmMediaStateChanged(const MediaBackend::State &newState) {
             resetBmLabels();
             break;
         case MediaBackend::EndOfMediaState: {
-            if (ui->checkBoxBmBreak->isChecked()) {
-                ui->checkBoxBmBreak->setChecked(false);
-                m_mediaBackendBm.stop(true);
-                resetBmLabels();
-                return;
-            }
-            auto plSong = m_tableModelPlaylistSongs.getNextPlSong();
-            if (plSong.has_value()) {
-                m_mediaBackendBm.setMedia(plSong->get().path);
-                m_tableModelPlaylistSongs.setCurrentPosition(plSong->get().position);
-                m_logger->info("{} Break music auto-advancing to song: {}", m_loggingPrefix,
-                               plSong->get().path.toStdString());
-                m_mediaBackendBm.stop(true);
-                m_mediaBackendBm.play();
-                if (m_mediaBackendKar.state() == MediaBackend::PlayingState)
-                    m_mediaBackendBm.fadeOutImmediate();
-            } else {
-                m_mediaBackendBm.stop(true);
-                resetBmLabels();
-            }
+            // Deferred for the same reason as the karaoke handler above: stopping or starting
+            // playback from inside GStreamer's own message handling re-enters the pipeline.
+            QTimer::singleShot(0, this, [this]() {
+                if (ui->checkBoxBmBreak->isChecked()) {
+                    ui->checkBoxBmBreak->setChecked(false);
+                    m_mediaBackendBm.stop(true);
+                    resetBmLabels();
+                    return;
+                }
+                auto plSong = m_tableModelPlaylistSongs.getNextPlSong();
+                if (plSong.has_value()) {
+                    m_mediaBackendBm.setMedia(plSong->get().path);
+                    m_tableModelPlaylistSongs.setCurrentPosition(plSong->get().position);
+                    m_logger->info("{} Break music auto-advancing to song: {}", m_loggingPrefix,
+                                   plSong->get().path.toStdString());
+                    m_mediaBackendBm.stop(true);
+                    m_mediaBackendBm.play();
+                    if (m_mediaBackendKar.state() == MediaBackend::PlayingState)
+                        m_mediaBackendBm.fadeOutImmediate();
+                } else {
+                    m_mediaBackendBm.stop(true);
+                    resetBmLabels();
+                }
+            });
             break;
         }
         case MediaBackend::PlayingState: {

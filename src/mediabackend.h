@@ -191,6 +191,9 @@ private:
     QString m_cdgFilename;
     QStringList m_outputDeviceNames;
     QTimer m_gstBusMsgHandlerTimer;
+    // Guards the bus drain against being re-entered, which can happen when a handler runs
+    // QApplication::processEvents() and the drain timer fires again inside it.
+    bool m_inBusMsgHandler{false};
     QTimer m_timerFast;
     QTimer m_timerSlow;
     int m_silenceDuration{0};

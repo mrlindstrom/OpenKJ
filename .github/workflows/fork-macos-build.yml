@@ -15,6 +15,11 @@ on:
         description: 'Existing release to attach the installer to, replacing any installer already there (e.g. 2.2.0). Leave blank to just build.'
         required: false
         default: ''
+      sanitize:
+        description: 'Build with AddressSanitizer for crash debugging. Slower; produces an app artifact only, never a release.'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -128,8 +133,31 @@ jobs:
         QT_DIR: "/opt/homebrew/opt/qt@5/"
         Qt5_DIR: "/opt/homebrew/opt/qt@5/"
       run: |
-        cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=Release -DBUNDLE_GSTREAMER=True . -B build -G Ninja
+        if [ "${{ inputs.sanitize }}" = "true" ]; then
+          echo "Building with AddressSanitizer"
+          cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUNDLE_GSTREAMER=True \
+                -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" \
+                -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" \
+                -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
+                . -B build -G Ninja
+        else
+          cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=Release -DBUNDLE_GSTREAMER=True . -B build -G Ninja
+        fi
         ninja -C build
+
+    # The sanitizer runtime is loaded by @rpath, which doesn't resolve inside a bundle, so copy
+    # it in and point the executable at the copy.
+    - name: Bundle the AddressSanitizer runtime
+      if: inputs.sanitize == true
+      working-directory: ${{github.workspace}}/build
+      run: |
+        ASAN_LIB=$(find "$(dirname "$(xcrun --find clang)")/../lib/clang" -name 'libclang_rt.asan_osx_dynamic.dylib' | head -1)
+        echo "Using $ASAN_LIB"
+        cp "$ASAN_LIB" openkj.app/Contents/Frameworks/
+        install_name_tool -change "@rpath/libclang_rt.asan_osx_dynamic.dylib" \
+          "@executable_path/../Frameworks/libclang_rt.asan_osx_dynamic.dylib" \
+          openkj.app/Contents/MacOS/openkj
+        otool -L openkj.app/Contents/MacOS/openkj | grep asan
 
     # macdeployqt and the relocator rewrite Mach-O headers with install_name_tool, which
     # invalidates the files' code signatures, and macOS on Apple Silicon kills any process that
@@ -195,9 +223,10 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         path: build/openkj.app
-        name: openkj.app
+        name: ${{ inputs.sanitize == true && 'openkj-asan.app' || 'openkj.app' }}
 
     - name: Create installer
+      if: inputs.sanitize != true
       working-directory: ${{github.workspace}}/build
       run: |
         mkdir -p fakeroot/Applications
@@ -219,6 +248,7 @@ jobs:
 #        product-path: ${{ github.workspace }}/build/${{ env.installer_fn }}
 
     - name: Upload installer
+      if: inputs.sanitize != true
       uses: actions/upload-artifact@v4
       with:
         path: build/${{ env.installer_fn }}
@@ -227,7 +257,7 @@ jobs:
     # Manual runs with a release_tag replace the installer on that existing release, so a fixed
     # build can be swapped in without re-tagging.  --clobber overwrites a same-named asset.
     - name: Attach installer to existing release
-      if: inputs.release_tag != ''
+      if: inputs.release_tag != '' && inputs.sanitize != true
       working-directory: ${{github.workspace}}/build
       env:
         GH_TOKEN: ${{ github.token }}
@@ -238,7 +268,7 @@ jobs:
 
     - name: Release
       uses: softprops/action-gh-release@v2
-      if: steps.get_version.outputs.is-semver == 'true'
+      if: steps.get_version.outputs.is-semver == 'true' && inputs.sanitize != true
       with:
         files: ${{ github.workspace }}/build/${{ env.installer_fn }}
         prerelease: ${{ env.rtype != 'release' }}
