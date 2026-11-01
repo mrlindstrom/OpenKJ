@@ -170,6 +170,9 @@ jobs:
           openkj.app/Contents/MacOS/openkj
         otool -L openkj.app/Contents/MacOS/openkj | grep asan
 
+    - name: Complete Qt library dependencies
+      run: python3 .github/scripts/bundle-qt-dependencies.py build/openkj.app
+
     # macdeployqt and the relocator rewrite Mach-O headers with install_name_tool, which
     # invalidates the files' code signatures, and macOS on Apple Silicon kills any process that
     # loads a binary with an invalid signature.  So re-sign every Mach-O file individually,
@@ -229,6 +232,10 @@ jobs:
         else
           echo "none - bundle looks self-contained"
         fi
+
+    - name: Test signed app startup
+      timeout-minutes: 2
+      run: python3 .github/scripts/test-macos-bundle.py build/openkj.app
 
     # Packed as a tarball first: a zipped .app loses symlinks, execute bits and its code
     # signature, and GitHub zips the folder's contents rather than the bundle itself.
