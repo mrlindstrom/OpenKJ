@@ -186,33 +186,6 @@ jobs:
           }
         }
 
-    - name: Make dist copy of gstreamer
-      run: |
-        cp -Rv c:/Program\ Files/gstreamer ./gstreamer-dist
-      shell: bash
-
-    # The devel package installs headers, static libs and docs alongside the runtime.  None of
-    # that is needed to run OpenKJ, and copying it into the installer roughly triples its size.
-    - name: Trim development files from the gstreamer dist copy
-      run: |
-        GSTDIST=./gstreamer-dist/1.0/mingw_x86_64
-        du -sh "$GSTDIST"
-        rm -rf "$GSTDIST/include"
-        rm -rf "$GSTDIST/lib/pkgconfig"
-        rm -rf "$GSTDIST/lib/cmake"
-        rm -rf "$GSTDIST/lib/glib-2.0/include"
-        rm -rf "$GSTDIST/lib/gstreamer-1.0/include"
-        rm -rf "$GSTDIST/share/gtk-doc"
-        rm -rf "$GSTDIST/share/man"
-        rm -rf "$GSTDIST/share/doc"
-        rm -rf "$GSTDIST/share/gdb"
-        rm -rf "$GSTDIST/share/gir-1.0"
-        find "$GSTDIST" -name '*.a' -delete
-        find "$GSTDIST" -name '*.la' -delete
-        find "$GSTDIST" -name '*.def' -delete
-        du -sh "$GSTDIST"
-      shell: bash
-
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
@@ -253,10 +226,9 @@ jobs:
       shell: cmd
 
     - name: Copy in gstreamer dependencies
+      shell: powershell
       run: |
-        cp -Rv ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/* output/
-        cp -v ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/bin/*.dll output/
-      shell: bash
+        ./cd/copy-gstreamer-runtime.ps1 -GstDir 'C:\Program Files\gstreamer\1.0\mingw_${{ matrix.arch }}' -OutputDir output
 
     - name: Copy in other dependencies
       run: |
@@ -267,6 +239,12 @@ jobs:
         copy ${{ steps.download-roboto-regular.outputs.file-path }} output\
         copy ${{ steps.download-source-code-pro-medium.outputs.file-path }} output\
         7z e -bb3 -y ${{ steps.download-openssl.outputs.file-path }} -o"output\"
+
+    - name: Test packaged runtime
+      timeout-minutes: 5
+      shell: powershell
+      run: |
+        ./cd/test-windows-runtime.ps1 -GstDir 'C:\Program Files\gstreamer\1.0\mingw_${{ matrix.arch }}' -OutputDir output
 
     # - name: Sign OpenKJ executable
     #   run: |

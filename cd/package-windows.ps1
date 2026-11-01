@@ -53,12 +53,9 @@ Step "Running windeployqt"
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
 
 # --- GStreamer runtime ------------------------------------------------------------------
-# GStreamer finds its plugins relative to the folder its DLL lives in, so the tree is copied
-# as-is and the bin DLLs are also placed next to OpenKJ.exe, the same layout the CI uses.
+# Use the same runtime layout and exclusions as CI.
 Step "Copying GStreamer runtime from $GstDir"
-robocopy $GstDir output /E /XD include pkgconfig cmake gtk-doc man doc gir-1.0 /XF *.lib *.a *.la *.pdb *.def /NFL /NDL /NJH /NJS /NP | Out-Null
-if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying GStreamer (exit code $LASTEXITCODE)" }
-Copy-Item (Join-Path $GstDir "bin\*.dll") output\
+& "$PSScriptRoot\copy-gstreamer-runtime.ps1" -GstDir $GstDir -OutputDir output
 
 # --- Extras the installer script expects -------------------------------------------------
 Step "Adding licence, fonts, unzip and OpenSSL"
