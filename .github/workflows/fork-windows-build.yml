@@ -23,6 +23,8 @@ jobs:
     # Pinned rather than windows-2025: that image now ships Visual Studio 2026, whose
     # STL dropped stdext::checked_array_iterator, which Qt 5.15.2's headers still use.
     runs-on: windows-2022
+    env:
+      GST_VERSION: '1.26.11'
     strategy:
       matrix:
         include:
@@ -107,21 +109,23 @@ jobs:
         sed -i "s/#define MyAppVersion.*/#define MyAppVersion \"${{ steps.get_version.outputs.version-without-v }}\"/" cd/openkj${{ matrix.bits }}.iss
       shell: bash
 
-    - name: Download GST Installer
-      uses: carlosperate/download-file-action@v2
-      id: download-gst
+    - name: Cache GStreamer installers
+      uses: actions/cache@v4
+      id: gst-installers
       with:
-        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.26.11/mingw/gstreamer-1.0-mingw-${{ matrix.arch }}-1.26.11.msi'
-        file-name: 'gstreamer.msi'
-        location: './downloads'
+        path: downloads/*.msi
+        key: windows-2022-${{ matrix.arch }}-gstreamer-mingw-${{ env.GST_VERSION }}-installers-v1
 
-    - name: Download GST-Dev Installer
-      uses: carlosperate/download-file-action@v2
-      id: download-gst-dev
-      with:
-        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.26.11/mingw/gstreamer-1.0-devel-mingw-${{ matrix.arch }}-1.26.11.msi'
-        file-name: 'gstreamer-devel.msi'
-        location: './downloads'
+    - name: Download GStreamer installers
+      if: steps.gst-installers.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p downloads
+        BASE_URL="https://gstreamer.freedesktop.org/data/pkg/windows/${GST_VERSION}/mingw"
+        curl --fail --location --retry 5 --retry-all-errors --connect-timeout 30 \
+          "$BASE_URL/gstreamer-1.0-mingw-${{ matrix.arch }}-${GST_VERSION}.msi" -o downloads/gstreamer.msi
+        curl --fail --location --retry 5 --retry-all-errors --connect-timeout 30 \
+          "$BASE_URL/gstreamer-1.0-devel-mingw-${{ matrix.arch }}-${GST_VERSION}.msi" -o downloads/gstreamer-devel.msi
 
     - name: Download InfoZip Binary
       uses: carlosperate/download-file-action@v2
@@ -174,10 +178,13 @@ jobs:
     - name: Install GST
       shell: powershell
       run: |
-        start-process -wait msiexec -argumentlist '/q /i ${{ steps.download-gst.outputs.file-path }} ADDLOCAL=ALL'
-        start-sleep 10
-        start-process -wait msiexec -argumentlist '/q /i ${{ steps.download-gst-dev.outputs.file-path }} ADDLOCAL=ALL'
-        start-sleep 10
+        foreach ($package in @('gstreamer.msi', 'gstreamer-devel.msi')) {
+          $packagePath = (Resolve-Path "downloads/$package").Path
+          $process = Start-Process -Wait -PassThru msiexec -ArgumentList "/qn /norestart /i `"$packagePath`" ADDLOCAL=ALL"
+          if ($process.ExitCode -notin @(0, 3010)) {
+            throw "Installing $package failed with exit code $($process.ExitCode)"
+          }
+        }
 
     - name: Make dist copy of gstreamer
       run: |
@@ -213,6 +220,7 @@ jobs:
        arch: ${{ matrix.qtarch }}
        modules: 'qtnetworkauth'
        archives: 'qtbase qtsvg'
+       cache: 'true'
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build
