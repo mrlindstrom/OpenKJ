@@ -114,7 +114,6 @@ void AudioRecorder::processGstMessage() {
                         logger->error("{} [gstreamer] {}", m_loggingPrefix, err->message);
                     }
                     logger->debug("{} [gstreamer] {}", m_loggingPrefix, debug);
-                    gst_message_unref(message);
                     g_error_free(err);
                     g_free(debug);
                     break;
@@ -126,6 +125,8 @@ void AudioRecorder::processGstMessage() {
                                   GST_MESSAGE_TYPE_NAME(message)
                     );
             }
+            // gst_bus_pop transfers one reference; release it once for every
+            // message type, including warnings and errors handled above.
             gst_message_unref(message);
         } else {
             done = true;
