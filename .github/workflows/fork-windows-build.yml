@@ -242,7 +242,7 @@ jobs:
 
     - name: Test packaged runtime
       timeout-minutes: 5
-      shell: powershell
+      shell: pwsh
       run: |
         ./cd/test-windows-runtime.ps1 -GstDir 'C:\Program Files\gstreamer\1.0\mingw_${{ matrix.arch }}' -OutputDir output
 
