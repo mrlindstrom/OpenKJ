@@ -58,11 +58,15 @@ try {
         @{ Encoder = @('lamemp3enc'); Extension = 'mp3' },
         @{ Encoder = @('wavenc'); Extension = 'wav' }
     )) {
-        $file = Join-Path $temp ("test." + $format.Extension)
+        # gst-launch parses these arguments as a pipeline: Windows backslashes
+        # would be consumed as escapes rather than kept in the filename.
+        $file = (Join-Path $temp ("test." + $format.Extension)).Replace('\', '/')
         $arguments = @('-q', 'audiotestsrc', 'num-buffers=16', '!', 'audioconvert', '!', 'audioresample', '!') + $format.Encoder + @('!', 'filesink', "location=$file")
         & $launch @arguments
         if ($LASTEXITCODE -ne 0) { throw "Packaged audio encoding failed: $($format.Extension)" }
-        & $launch -q uridecodebin "uri=$(([Uri]$file).AbsoluteUri)" '!' audioconvert '!' fakesink
+        if (-not (Test-Path $file) -or (Get-Item $file).Length -eq 0) { throw "Encoded file missing or empty: $file" }
+        $uri = [Uri]::new($file, [UriKind]::Absolute).AbsoluteUri
+        & $launch -q uridecodebin "uri=$uri" '!' audioconvert '!' fakesink
         if ($LASTEXITCODE -ne 0) { throw "Packaged audio playback failed: $($format.Extension)" }
     }
     & $launch -q videotestsrc num-buffers=16 '!' videoconvert '!' videoscale '!' 'video/x-raw,format=BGRx' '!' fakesink
